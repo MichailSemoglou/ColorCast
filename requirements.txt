@@ -1,0 +1,4 @@
+numpy
+scikit-image
+PyQt5
+scipy
