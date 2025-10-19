@@ -1,12 +1,17 @@
 """
-ColorCast - Style Transfer Application
+ColorCast - Advanced Color Transfer Suite
 
-A PyQt5 GUI application for style transfer using histogram matching (LUT transfer) between images.
-Users can load a content image and a style image, apply histogram matching, and save the result.
+A sophisticated PyQt5 GUI application for advanced color and style transfer between images.
+ColorCast offers 8 transfer algorithms including histogram matching, mean/std transfer, 
+LUT-based curves, and selective regional color transfer.
 
 Features:
+- 8 sophisticated transfer algorithms (histogram, statistical, LUT curves, selective regional)
+- Real-time intensity control with smooth slider (0-100%)
+- Selective regional color transfer (shadows/midtones/highlights)
+- LUT-based transfer with multiple curve options (linear, s-curve, contrast)
 - Supports RGB, grayscale, and RGBA images (automatically converts to RGB for processing)
-- Automatic image format conversion and preprocessing
+- Optimized performance with smart caching and debounced slider updates
 - Interactive GUI with image preview and save functionality
 
 Dependencies: numpy, scikit-image, scipy, PyQt5

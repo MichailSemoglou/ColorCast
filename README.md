@@ -11,6 +11,7 @@ _ColorCast's intuitive interface showing content image, style image, and result 
 ## Features
 
 ### Core Features
+
 - **Easy-to-use GUI** with intuitive button-based interface
 - **8 Transfer Methods** - Choose from multiple algorithms for different effects
 - **Intensity Control** - Smooth slider (0-100%) to blend between original and styled images
@@ -37,6 +38,7 @@ _ColorCast's intuitive interface showing content image, style image, and result 
 ColorCast provides multiple sophisticated algorithms for color transfer:
 
 **Basic Workflow:**
+
 1. **Select Transfer Method**: Choose your preferred algorithm from the dropdown
 2. **Load Content Image**: The image you want to transform
 3. **Load Style Image**: The image whose color palette/mood you want to copy
@@ -125,16 +127,19 @@ The application works great for:
 ### Algorithms Implemented
 
 1. **Histogram Matching**:
+
    - Per-channel histogram equalization
    - Preserves complete color distribution
    - Best for dramatic color transformations
 
 2. **Mean/Standard Deviation Transfer**:
+
    - Formula: `result = ((source - μ_source) × (σ_ref / σ_source)) + μ_ref`
    - Matches statistical properties per channel
    - Better color balance for photographic work
 
 3. **LUT with Curves**:
+
    - Linear: Standard histogram matching
    - S-Curve: `0.5 + 0.5 * sin(π(x - 0.5))` - smooth midtone enhancement
    - Contrast: `x^0.8` - power curve for increased punch
