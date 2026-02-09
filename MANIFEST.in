@@ -1,0 +1,36 @@
+# Include important documentation files
+include README.md
+include LICENSE
+include CITATION.cff
+include RELEASE_NOTES.md
+include requirements.txt
+include requirements-dev.txt
+
+# Include configuration files
+include pyproject.toml
+
+# Include documentation
+recursive-include docs *.rst *.py *.md
+
+# Include tests
+recursive-include tests *.py
+
+# Exclude unnecessary files
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so
+global-exclude .DS_Store
+global-exclude *.swp
+global-exclude *.swo
+
+# Exclude development and build artifacts
+prune .venv
+prune .git
+prune .github
+prune .pytest_cache
+prune .hypothesis
+prune htmlcov
+prune .benchmarks
+exclude .gitignore
+exclude .coverage
+exclude .zenodo.json

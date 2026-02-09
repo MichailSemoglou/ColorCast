@@ -1,0 +1,291 @@
+"""
+GPU-accelerated color transfer using CuPy.
+
+This module provides GPU implementations of color transfer algorithms
+for improved performance on large images and batch processing.
+"""
+
+from typing import Literal, Optional
+import numpy as np
+
+# Try to import CuPy, fallback gracefully if not available
+try:
+    import cupy as cp
+    HAS_CUPY = True
+except ImportError:
+    HAS_CUPY = False
+    cp = None  # Type stub for mypy
+    import warnings
+    warnings.warn("CuPy is not installed. GPU acceleration will be disabled.")
+
+
+def gpu_histogram_matching(
+    source: np.ndarray,
+    reference: np.ndarray
+) -> np.ndarray:
+    """
+    GPU-accelerated histogram matching using CuPy.
+    
+    Args:
+        source: Source image array (H, W, 3) in range [0, 255]
+        reference: Reference image array (H, W, 3) in range [0, 255]
+
+    Returns:
+        Matched image array (H, W, 3) in range [0, 255]
+    """
+    if not HAS_CUPY:
+        # Fallback to CPU implementation
+        from skimage import exposure
+        result = np.empty_like(source)
+        for i in range(3):
+            result[:, :, i] = exposure.match_histograms(
+                source[:, :, i], reference[:, :, i]
+            )
+        return result.astype(source.dtype)
+    
+    # Convert to GPU arrays
+    source_gpu = cp.asarray(source)
+    reference_gpu = cp.asarray(reference)
+    
+    # Transfer to GPU memory
+    source_gpu = cp.asarray(source, dtype=cp.float32)
+    reference_gpu = cp.asarray(reference, dtype=cp.float32)
+    
+    # Compute histogram matching per channel on GPU
+    matched_gpu = cp.empty_like(source_gpu)
+    for i in range(3):
+        # Extract channels
+        source_channel = source_gpu[:, :, i]
+        reference_channel = reference_gpu[:, :, i]
+        
+        # Match histograms using scikit-image compatible implementation
+        # For now, use CPU for histogram matching as it's complex
+        # but move data back to CPU for the matching operation
+        source_cpu = cp.asnumpy(source_channel)
+        reference_cpu = cp.asnumpy(reference_channel)
+        
+        from skimage import exposure
+        matched_channel = exposure.match_histograms(
+            source_cpu, reference_cpu
+        )
+        
+        matched_gpu[:, :, i] = cp.asarray(matched_channel, dtype=cp.float32)
+    
+    # Transfer result back to CPU
+    result = cp.asnumpy(matched_gpu).astype(source.dtype)
+    return result
+
+
+def gpu_mean_std_transfer(
+    source: np.ndarray,
+    reference: np.ndarray
+) -> np.ndarray:
+    """
+    GPU-accelerated mean and standard deviation transfer using CuPy.
+    
+    Args:
+        source: Source image array (H, W, 3) in range [0, 1]
+        reference: Reference image array (H, W, 3) in range [0, 1]
+
+    Returns:
+        Transferred image array (H, W, 3) in range [0, 1]
+    """
+    if not HAS_CUPY:
+        # Fallback to CPU implementation
+        result = np.empty_like(source)
+        for i in range(3):
+            source_mean = np.mean(source[:, :, i])
+            source_std = np.std(source[:, :, i])
+            ref_mean = np.mean(reference[:, :, i])
+            ref_std = np.std(reference[:, :, i])
+            
+            epsilon = 1e-8
+            result[:, :, i] = (
+                (source[:, :, i] - source_mean)
+                * (ref_std / (source_std + epsilon))
+            ) + ref_mean
+        
+        return np.clip(result, 0, 1).astype(source.dtype)
+    
+    # Convert to GPU arrays in range [0, 1]
+    source_gpu = cp.asarray(source, dtype=cp.float32) / 255.0
+    reference_gpu = cp.asarray(reference, dtype=cp.float32) / 255.0
+    
+    # Compute mean and std transfer per channel on GPU
+    result_gpu = cp.empty_like(source_gpu)
+    for i in range(3):
+        source_channel = source_gpu[:, :, i]
+        reference_channel = reference_gpu[:, :, i]
+        
+        # Compute statistics on GPU
+        source_mean = cp.mean(source_channel)
+        source_std = cp.std(source_channel)
+        ref_mean = cp.mean(reference_channel)
+        ref_std = cp.std(reference_channel)
+        
+        # Apply transfer
+        epsilon = 1e-8
+        result_gpu[:, :, i] = (
+            (source_channel - source_mean)
+            * (ref_std / (source_std + epsilon))
+        ) + ref_mean
+    
+    # Clip to [0, 1] and convert back to [0, 255]
+    result_gpu = cp.clip(result_gpu, 0, 1)
+    result = cp.asnumpy(result_gpu) * 255.0
+    result = np.clip(result, 0, 255).astype(source.dtype)
+    
+    return result
+
+
+def gpu_lab_transfer(
+    source: np.ndarray,
+    reference: np.ndarray,
+    alpha: float = 1.0,
+) -> np.ndarray:
+    """
+    GPU-accelerated Lab color space transfer using CuPy.
+    
+    Args:
+        source: Source image array (H, W, 3) in range [0, 1]
+        reference: Reference image array (H, W, 3) in range [0, 1]
+        alpha: Transfer strength (0.0 to 1.0)
+
+    Returns:
+        Transferred image array (H, W, 3) in range [0, 1]
+    """
+    if not HAS_CUPY:
+        # Fallback to CPU implementation
+        from skimage import color
+        result = np.empty_like(source)
+        
+        # Clamp alpha
+        alpha = np.clip(alpha, 0.0, 1.0)
+        
+        # Convert RGB to Lab color space
+        source_lab = color.rgb2lab(source)
+        reference_lab = color.rgb2lab(reference)
+        
+        # Compute statistics in Lab space
+        result_lab = np.empty_like(source_lab)
+        for i in range(3):
+            # Compute mean and std for source and reference
+            source_mean = np.mean(source_lab[:, :, i])
+            source_std = np.std(source_lab[:, :, i])
+            ref_mean = np.mean(reference_lab[:, :, i])
+            ref_std = np.std(reference_lab[:, :, i])
+            
+            # Apply statistical transfer
+            epsilon = 1e-8
+            result_lab[:, :, i] = (
+                (source_lab[:, :, i] - source_mean)
+                * (ref_std / (source_std + epsilon))
+            ) + ref_mean
+        
+        # Clip to valid Lab ranges
+        result_lab[:, :, 0] = np.clip(result_lab[:, :, 0], 0, 100)  # L channel
+        result_lab[:, :, 1] = np.clip(result_lab[:, :, 1], -128, 127)  # a channel
+        result_lab[:, :, 2] = np.clip(result_lab[:, :, 2], -128, 127)  # b channel
+        
+        # Apply alpha blending for partial transfer
+        if alpha < 1.0:
+            result_lab = source_lab * (1 - alpha) + result_lab * alpha
+        
+        # Convert Lab back to RGB
+        result_rgb = color.lab2rgb(result_lab)
+        
+        # Ensure result is in valid range [0, 1]
+        result_rgb = np.clip(result_rgb, 0, 1).astype(source.dtype)
+        
+        return result_rgb
+    
+    # Convert to GPU arrays in range [0, 1]
+    source_gpu = cp.asarray(source, dtype=cp.float32)
+    reference_gpu = cp.asarray(reference, dtype=cp.float32)
+    
+    # Clamp alpha
+    alpha = float(alpha)
+    alpha = max(0.0, min(1.0, alpha))
+    
+    # Convert RGB to Lab color space (requires GPU implementation)
+    # For now, convert to CPU, transfer, then back to GPU
+    from skimage import color
+    
+    source_lab_cpu = color.rgb2lab(source)
+    reference_lab_cpu = color.rgb2lab(reference)
+    
+    # Transfer to GPU
+    source_lab = cp.asarray(source_lab_cpu, dtype=cp.float32)
+    reference_lab = cp.asarray(reference_lab_cpu, dtype=cp.float32)
+    
+    # Compute statistics in Lab space on GPU
+    result_lab_gpu = cp.empty_like(source_lab)
+    for i in range(3):
+        # Compute mean and std for source and reference
+        source_mean = cp.mean(source_lab[:, :, i])
+        source_std = cp.std(source_lab[:, :, i])
+        ref_mean = cp.mean(reference_lab[:, :, i])
+        ref_std = cp.std(reference_lab[:, :, i])
+        
+        # Apply statistical transfer
+        epsilon = 1e-8
+        result_lab_gpu[:, :, i] = (
+            (source_lab[:, :, i] - source_mean)
+            * (ref_std / (source_std + epsilon))
+        ) + ref_mean
+    
+    # Clip to valid Lab ranges
+    result_lab_gpu[:, :, 0] = cp.clip(result_lab_gpu[:, :, 0], 0, 100)  # L channel
+    result_lab_gpu[:, :, 1] = cp.clip(result_lab_gpu[:, :, 1], -128, 127)  # a channel
+    result_lab_gpu[:, :, 2] = cp.clip(result_lab_gpu[:, :, 2], -128, 127)  # b channel
+    
+    # Apply alpha blending for partial transfer
+    if alpha < 1.0:
+        result_lab_gpu = source_lab * (1 - alpha) + result_lab_gpu * alpha
+    
+    # Convert Lab back to RGB on CPU (color.lab2rgb is not available in CuPy)
+    result_lab_cpu = cp.asnumpy(result_lab_gpu)
+    from skimage import color
+    result_rgb = color.lab2rgb(result_lab_cpu)
+    
+    # Ensure result is in valid range [0, 1]
+    result_rgb = np.clip(result_rgb, 0, 1).astype(source.dtype)
+    
+    return result_rgb
+
+
+def gpu_histogram_matching_multichannel(
+    source: np.ndarray,
+    reference: np.ndarray
+) -> np.ndarray:
+    """
+    GPU-accelerated multichannel histogram matching using CuPy.
+    
+    Args:
+        source: Source image array (H, W, 3) in range [0, 255]
+        reference: Reference image array (H, W, 3) in range [0, 255]
+
+    Returns:
+        Matched image array (H, W, 3) in range [0, 255]
+    """
+    if not HAS_CUPY:
+        # Fallback to CPU implementation
+        from colorcast.processing.transfer_methods import match_histograms_multichannel
+        return match_histograms_multichannel(source, reference)
+    
+    return gpu_histogram_matching(source, reference)
+
+
+def is_gpu_available() -> bool:
+    """Check if GPU acceleration is available."""
+    return HAS_CUPY
+
+
+# Export functions for module API
+__all__ = [
+    "gpu_histogram_matching",
+    "gpu_mean_std_transfer",
+    "gpu_lab_transfer",
+    "gpu_histogram_matching_multichannel",
+    "is_gpu_available",
+]

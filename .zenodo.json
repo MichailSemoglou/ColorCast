@@ -1,0 +1,37 @@
+{
+  "title": "ColorCast: Advanced Color Transfer Toolkit for Python",
+  "description": "ColorCast is a Python toolkit for advanced color and style transfer between images. It provides multiple algorithms including histogram matching, mean/std transfer, LUT-based curves, selective regional color transfer, and GPU acceleration using CuPy. The toolkit supports both GUI and CLI interfaces with comprehensive caching and batch processing capabilities.",
+  "upload_type": "software",
+  "creators": [
+    {
+      "name": "Semoglou, Michail",
+      "affiliation": "College of Design and Innovation, Tongji University",
+      "orcid": ""
+    }
+  ],
+  "keywords": [
+    "color transfer",
+    "image processing",
+    "histogram matching",
+    "Reinhard algorithm",
+    "Lab color space",
+    "color grading",
+    "Python",
+    "GPU acceleration",
+    "CuPy",
+    "computer vision"
+  ],
+  "license": "MIT",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/MichailSemoglou/ColorCast",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ],
+  "references": [],
+  "communities": [],
+  "version": "2.0.0",
+  "language": "eng"
+}

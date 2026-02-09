@@ -1,0 +1,100 @@
+[project]
+name = "colorcast"
+version = "2.0.0"
+description = "Advanced color and style transfer toolkit for images"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Michail Semoglou", email = "m.semoglou@tongji.edu.cn"}
+]
+keywords = ["color-transfer", "image-processing", "computer-vision", "pyqt5", "style-transfer"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Multimedia :: Graphics",
+]
+
+dependencies = [
+    "numpy>=1.20.0,<2.0.0",
+    "scikit-image>=0.18.0,<0.22.0",
+    "PyQt5>=5.15.0,<6.0.0",
+    "scipy>=1.7.0,<2.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/MichailSemoglou/ColorCast"
+Documentation = "https://github.com/MichailSemoglou/ColorCast#readme"
+Repository = "https://github.com/MichailSemoglou/ColorCast.git"
+Issues = "https://github.com/MichailSemoglou/ColorCast/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-qt>=4.0.0",
+    "pytest-benchmark>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "hypothesis>=6.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+    "pylint>=2.17.0",
+    "ruff>=0.1.0",
+    "Pillow>=9.0.0",
+]
+
+docs = [
+    "sphinx>=7.0.0",
+    "sphinx-rtd-theme>=2.0.0",
+    "sphinx-autodoc-typehints>=1.24.0",
+    "sphinxcontrib-jquery>=4.1.0",
+]
+
+gpu = [
+    "cupy-cuda12x>=12.0.0",
+]
+
+analysis = [
+    "matplotlib>=3.5.0",
+]
+
+all = ["colorcast[dev,docs,gpu,analysis]"]
+
+[project.scripts]
+colorcast = "colorcast.__main__:main"
+colorcast-gui = "colorcast.__main__:main"
+
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312', 'py313']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=colorcast --cov-report=html --cov-report=term"

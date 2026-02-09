@@ -1,4 +1,15 @@
-numpy
-scikit-image
-PyQt5
-scipy
+# Core dependencies for colorcast
+numpy>=1.21.0
+scipy>=1.7.0
+scikit-image>=0.19.0
+Pillow>=9.0.0
+matplotlib>=3.5.0
+PyQt5>=5.15.0
+
+# GUI and interface
+PyQt5-Qt5>=5.15.0
+
+# Optional GPU support (requires CUDA)
+# cupy-cuda11x>=11.0.0  # Linux, Windows (CUDA 11.x)
+# Note: GPU acceleration is optional and gracefully falls back to CPU
+# if CuPy is not installed, CPU implementations are used
