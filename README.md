@@ -104,7 +104,7 @@ python -m colorcast
 
 **Step-by-step:**
 
-1. **Select Transfer Method**: Choose from 8 different algorithms at the top
+1. **Select Transfer Method**: Choose from 9 different algorithms at the top
 2. **Load Content Image**: Click to select your base image
 3. **Load Style Image**: Click to select the image whose style you want to copy
 4. **Apply Style Transfer**: Click to process the images
