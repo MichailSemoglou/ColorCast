@@ -43,7 +43,7 @@ _ColorCast's intuitive interface showing content image, style image, and result 
 
 ### From PyPI (Recommended)
 
-Once published, install ColorCast using pip:
+Install ColorCast using pip:
 
 ```bash
 pip install colorcast
@@ -309,7 +309,7 @@ colorcast/
 │       ├── config.py             # Configuration
 │       ├── exceptions.py         # Custom exceptions
 │       └── validators.py         # Input validation
-├── tests/                        # Test suite (117+ tests)
+├── tests/                        # Test suite (127 tests)
 │   ├── test_image_loading.py
 │   ├── test_transfer_methods.py
 │   ├── test_blending.py
@@ -341,18 +341,10 @@ pytest tests/test_transfer_methods.py
 pytest -v
 ```
 
-**Test Coverage:**
+**Test Coverage:** 45% (127 passing tests)
 
-| Component        | Coverage |
-| ---------------- | -------- |
-| Transfer Methods | 99%      |
-| Image Loading    | 85%      |
-| Blending         | 100%     |
-| Caching          | 90%      |
-| Batch Processing | 75%      |
-| Integration      | 60%      |
-| Lab Transfer     | 100%     |
-| **Total**        | **45%**  |
+- Core transfer methods: 99% coverage
+- Full test suite including integration, performance, and property-based tests
 
 ## Technical Details
 
@@ -388,13 +380,13 @@ result_lab = ((source_lab - μ_source) × (σ_ref / σ_source)) + μ_ref
 - Preserves color relationships better than RGB methods
 - More natural-looking results
 
-**3. LUT with Curves**
+**4. LUT with Curves**
 
 - **Linear**: Standard histogram matching
 - **S-Curve**: `0.5 + 0.5 × sin(π(x - 0.5))` - smooth midtone enhancement
 - **Contrast**: `x^0.8` - power curve for increased punch
 
-**4. Selective Color Transfer**
+**5. Selective Color Transfer**
 
 ```python
 luminance = 0.299R + 0.587G + 0.114B
