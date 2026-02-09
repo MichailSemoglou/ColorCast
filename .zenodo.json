@@ -28,6 +28,11 @@
       "identifier": "https://github.com/MichailSemoglou/ColorCast",
       "relation": "isSupplementTo",
       "scheme": "url"
+    },
+    {
+      "identifier": "10.5281/zenodo.18550039",
+      "relation": "isIdenticalTo",
+      "scheme": "doi"
     }
   ],
   "references": [],

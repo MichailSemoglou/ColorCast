@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Code Coverage](https://img.shields.io/badge/coverage-45%25-orange.svg)](tests/)
 [![Tests](https://img.shields.io/badge/tests-127%20passed-brightgreen.svg)](tests/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18550039.svg)](https://doi.org/10.5281/zenodo.18550039)
 
 **ColorCast** is a sophisticated toolkit for advanced color and style transfer between images. It offers multiple algorithms including histogram matching, mean/std transfer, LUT-based curves, and selective regional color transfer.
 

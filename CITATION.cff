@@ -13,6 +13,7 @@ authors:
 license: MIT
 repository-code: "https://github.com/MichailSemoglou/ColorCast"
 url: "https://github.com/MichailSemoglou/ColorCast"
+doi: 10.5281/zenodo.18550039
 keywords:
   - color transfer
   - image processing
