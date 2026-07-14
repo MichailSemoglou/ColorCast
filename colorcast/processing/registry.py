@@ -387,3 +387,78 @@ class SelectiveHighlightsMethod(TransferMethod):
         return selective_color_transfer(
             source, reference, mode="highlights", highlight_threshold=highlight_threshold
         )
+
+
+@registry.register
+class DeuteranopiaSimulatorMethod(TransferMethod):
+    """Deuteranopia (green-cone absent) colour-blindness simulation.
+
+    Unlike the style-transfer methods, this method ignores the reference
+    image entirely and transforms the source image alone.  The ``intensity``
+    slider in the GUI acts as a *severity* control (0 % = normal vision,
+    100 % = total green-blindness) via the standard blend_images call.
+    """
+
+    @property
+    def name(self) -> str:
+        return "Simulator: Deuteranopia"
+
+    @property
+    def id(self) -> str:
+        return "simulate_deuteranopia"
+
+    def transfer(
+        self,
+        source: np.ndarray,
+        reference: np.ndarray,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        from colorcast.processing.simulation import ColorBlindSimulator
+
+        return ColorBlindSimulator().simulate_deuteranopia(source)
+
+
+@registry.register
+class ProtanopiaSimulatorMethod(TransferMethod):
+    """Protanopia (red-cone absent) colour-blindness simulation."""
+
+    @property
+    def name(self) -> str:
+        return "Simulator: Protanopia"
+
+    @property
+    def id(self) -> str:
+        return "simulate_protanopia"
+
+    def transfer(
+        self,
+        source: np.ndarray,
+        reference: np.ndarray,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        from colorcast.processing.simulation import ColorBlindSimulator
+
+        return ColorBlindSimulator().simulate_protanopia(source)
+
+
+@registry.register
+class TritanopiaSimulatorMethod(TransferMethod):
+    """Tritanopia (blue-cone absent) colour-blindness simulation."""
+
+    @property
+    def name(self) -> str:
+        return "Simulator: Tritanopia"
+
+    @property
+    def id(self) -> str:
+        return "simulate_tritanopia"
+
+    def transfer(
+        self,
+        source: np.ndarray,
+        reference: np.ndarray,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        from colorcast.processing.simulation import ColorBlindSimulator
+
+        return ColorBlindSimulator().simulate_tritanopia(source)

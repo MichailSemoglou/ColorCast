@@ -15,12 +15,12 @@ The package supports:
 - Batch processing with parallel execution
 - Configuration management
 
-Version: 2.0.0
+Version: 2.1.1
 Author: Michail Semoglou
 License: MIT
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.1"
 __author__ = "Michail Semoglou"
 __email__ = "m.semoglou@tongji.edu.cn"
 __license__ = "MIT"

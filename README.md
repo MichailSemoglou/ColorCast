@@ -2,11 +2,12 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Coverage](https://img.shields.io/badge/coverage-45%25-orange.svg)](tests/)
-[![Tests](https://img.shields.io/badge/tests-127%20passed-brightgreen.svg)](tests/)
+[![Code Coverage](https://img.shields.io/badge/coverage-44%25-orange.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-159%20passed-brightgreen.svg)](tests/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18550039.svg)](https://doi.org/10.5281/zenodo.18550039)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/colorcast?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/colorcast)
 
-**ColorCast** is a sophisticated toolkit for advanced color and style transfer between images. It offers multiple algorithms including histogram matching, mean/std transfer, LUT-based curves, and selective regional color transfer.
+**ColorCast** is a Python toolkit for color and style transfer between images. It provides histogram matching, mean/std transfer, LUT-based curves (linear, S-curve, contrast), and selective regional color transfer across shadows, midtones, and highlights. Color-vision-deficiency simulation covers deuteranopia, protanopia, and tritanopia; the Daltonization pipeline corrects images for dichromatic observers.
 
 ## Features
 
@@ -17,8 +18,8 @@
 - **Selective Regional Transfer** - Target shadows, midtones, or highlights specifically
 - **Modular Package** - Use as Python API or run GUI/CLI
 - **Performance Optimized** - LRU caching and batch processing support
-- **Fully Tested** - 45% test coverage with 127 passing tests
-- **Well Documented** - Comprehensive API documentation and examples
+- **Tested** - 44% test coverage with 159 passing tests
+- **Documented** - API documentation and examples
 - **Plugin Architecture** - Easy to add custom transfer methods
 
 ### Transfer Methods
@@ -80,7 +81,7 @@ pip install -e ".[gpu]"
 
 - Python 3.10+
 - NumPy >= 1.20.0
-- scikit-image >= 0.18.0
+- scikit-image >= 0.19.0
 - PyQt5 >= 5.15.0 (for GUI)
 - scipy >= 1.7.0
 
@@ -93,7 +94,7 @@ See `pyproject.toml` for complete dependency specifications.
 Run the graphical interface:
 
 ```bash
-python colorcast.py
+colorcast-gui
 ```
 
 Or use the package entry point:
@@ -101,6 +102,8 @@ Or use the package entry point:
 ```bash
 python -m colorcast
 ```
+
+The root `colorcast.py` script is kept as a deprecated compatibility shim and also launches the GUI. Use `python -m colorcast` or `colorcast-gui` for new work.
 
 **Step-by-step:**
 
@@ -294,33 +297,55 @@ print(f"Cache hits: {stats['hits']}, misses: {stats['misses']}")
 
 ```
 colorcast/
-├── colorcast/                    # Main package
-│   ├── __init__.py               # Package exports
-│   ├── __main__.py               # CLI entry point
-│   ├── processing/               # Processing modules
-│   │   ├── image_loader.py       # Image I/O
-│   │   ├── transfer_methods.py   # Color transfer algorithms
-│   │   ├── blending.py           # Intensity blending
-│   │   ├── curves.py             # Tone curves
-│   │   ├── registry.py           # Plugin system
-│   │   ├── cache.py              # LRU cache
-│   │   └── batch.py              # Batch processing
-│   └── utils/                    # Utility modules
-│       ├── config.py             # Configuration
-│       ├── exceptions.py         # Custom exceptions
-│       └── validators.py         # Input validation
-├── tests/                        # Test suite (127 tests)
+├── colorcast/                     # Main package
+│   ├── __init__.py                # Package exports
+│   ├── __main__.py                # CLI and GUI entry points
+│   ├── gui.py                     # PyQt5 graphical interface
+│   ├── analysis/                  # Analysis and correction tools
+│   │   ├── __init__.py
+│   │   ├── comparison.py          # Side-by-side method comparison
+│   │   ├── daltonization.py       # Color-vision-deficiency correction
+│   │   ├── error_map.py           # Chromatic error analysis
+│   │   └── visualization.py       # Plotting helpers
+│   ├── processing/                # Processing modules
+│   │   ├── __init__.py
+│   │   ├── image_loader.py        # Image I/O
+│   │   ├── transfer_methods.py    # Color transfer algorithms
+│   │   ├── blending.py            # Intensity blending
+│   │   ├── curves.py              # Tone curves
+│   │   ├── registry.py            # Plugin system
+│   │   ├── cache.py               # LRU cache
+│   │   ├── batch.py               # Batch processing
+│   │   ├── simulation.py          # Color-vision-deficiency simulation
+│   │   └── gpu_transfer.py        # GPU-accelerated transfers
+│   └── utils/                     # Utility modules
+│       ├── __init__.py
+│       ├── config.py              # Configuration
+│       ├── exceptions.py          # Custom exceptions
+│       ├── validators.py          # Input validation
+│       └── validators_enhanced.py # Extended validation helpers
+├── tests/                         # Test suite
+│   ├── __init__.py
 │   ├── test_image_loading.py
 │   ├── test_transfer_methods.py
 │   ├── test_blending.py
 │   ├── test_cache.py
 │   ├── test_batch.py
+│   ├── test_color_blindness.py
+│   ├── test_entry_points.py
 │   ├── test_integration.py
-│   └── test_performance.py
-├── colorcast.py                  # Production-ready monolithic version
-├── pyproject.toml                # Modern Python packaging
-├── requirements.txt              # Legacy requirements
-└── README.md                     # This file
+│   ├── test_integration_comprehensive.py
+│   ├── test_lab_transfer.py
+│   ├── test_performance.py
+│   └── test_property_based.py
+├── colorcast.py                   # Deprecated compatibility shim for the GUI
+├── pyproject.toml                 # Modern Python packaging
+├── requirements.txt               # Runtime requirements
+├── requirements-dev.txt           # Development requirements
+├── README.md                      # This file
+├── CHANGELOG.md                   # Release history
+├── CITATION.cff                   # Citation metadata
+└── AGENTS.md                      # Repository writing guide
 ```
 
 ## Testing
@@ -341,10 +366,11 @@ pytest tests/test_transfer_methods.py
 pytest -v
 ```
 
-**Test Coverage:** 45% (127 passing tests)
+**Test Coverage:** 44% (159 passing tests, 1 skipped)
 
 - Core transfer methods: 99% coverage
 - Full test suite including integration, performance, and property-based tests
+- Property-based tests require the optional `hypothesis` dependency
 
 ## Technical Details
 
@@ -446,13 +472,12 @@ mypy colorcast/
 
 ## License
 
-This project is open source and available under the [MIT License](LICENSE).
+Released under the [MIT License](LICENSE).
 
 ## Author
 
 **Michail Semoglou**
 
-- GitHub: [@MichailSemoglou](https://github.com/MichailSemoglou)
 - Email: m.semoglou@tongji.edu.cn
 
 ## Acknowledgments
@@ -467,9 +492,3 @@ For issues, questions, or suggestions:
 
 - [Report a bug](https://github.com/MichailSemoglou/ColorCast/issues)
 - [Request a feature](https://github.com/MichailSemoglou/ColorCast/issues)
-- Email: m.semoglou@tongji.edu.cn
-
----
-
-**Version**: 2.0.0  
-**Last Updated**: February 2026

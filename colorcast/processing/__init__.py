@@ -10,6 +10,7 @@ from colorcast.processing.transfer_methods import (
 from colorcast.processing.curves import apply_curve
 from colorcast.processing.blending import blend_images
 from colorcast.processing.registry import registry
+from colorcast.processing.simulation import ColorBlindSimulator
 
 __all__ = [
     "load_image",
@@ -21,4 +22,5 @@ __all__ = [
     "apply_curve",
     "blend_images",
     "registry",
+    "ColorBlindSimulator",
 ]

@@ -72,3 +72,15 @@ Desktop.ini
 # Temporary files
 *.tmp
 *.temp
+
+# SoftwareX manuscript (local draft, not for version control)
+softwareX/
+
+# Kimi Code CLI local instructions
+.kimi/instructions.md
+
+# Project agent instructions (local development only)
+/AGENTS.md
+
+# Local roadmap
+/ROADMAP.md

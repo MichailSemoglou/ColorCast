@@ -8,8 +8,8 @@ def blend_images(original: np.ndarray, styled: np.ndarray, intensity: float) -> 
     Blend original and styled images based on intensity.
 
     Args:
-        original: Original image array (H, W, 3)
-        styled: Styled image array (H, W, 3)
+        original: Original image array (H, W, 3) in range [0, 1]
+        styled: Styled image array (H, W, 3) in range [0, 1]
         intensity: Blending intensity (0.0 to 1.0), where 0.0 = original,
                   1.0 = fully styled
 
@@ -17,4 +17,5 @@ def blend_images(original: np.ndarray, styled: np.ndarray, intensity: float) -> 
         Blended image array (H, W, 3) in range [0, 1]
     """
     intensity = np.clip(intensity, 0.0, 1.0)
-    return (original * (1 - intensity) + styled * intensity).astype(original.dtype)
+    blended = original * (1 - intensity) + styled * intensity
+    return np.clip(blended, 0.0, 1.0).astype(original.dtype)

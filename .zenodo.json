@@ -1,6 +1,6 @@
 {
-  "title": "ColorCast: Advanced Color Transfer Toolkit for Python",
-  "description": "ColorCast is a Python toolkit for advanced color and style transfer between images. It provides multiple algorithms including histogram matching, mean/std transfer, LUT-based curves, selective regional color transfer, and GPU acceleration using CuPy. The toolkit supports both GUI and CLI interfaces with comprehensive caching and batch processing capabilities.",
+  "title": "ColorCast: Color Transfer Toolkit for Python",
+  "description": "ColorCast is a Python toolkit for color and style transfer between images. It provides multiple algorithms including histogram matching, mean/std transfer, LUT-based curves, selective regional color transfer, and GPU acceleration using CuPy. The toolkit supports both GUI and CLI interfaces with caching and batch processing capabilities.",
   "upload_type": "software",
   "creators": [
     {
@@ -37,6 +37,6 @@
   ],
   "references": [],
   "communities": [],
-  "version": "2.0.0",
+  "version": "2.1.1",
   "language": "eng"
 }

@@ -1,7 +1,7 @@
 """LRU cache for styled images."""
 
 import hashlib
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 import numpy as np
 
 
@@ -88,8 +88,10 @@ class StyleTransferCache:
             # Update access order (LRU)
             self.access_order.remove(key)
             self.access_order.append(key)
+            self.hits += 1
             return self.cache[key]
 
+        self.misses += 1
         return None
 
     def set(

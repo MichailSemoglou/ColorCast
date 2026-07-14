@@ -16,7 +16,7 @@ from colorcast import (
     registry,
 )
 from colorcast.processing.batch import BatchProcessor
-from colorcast.processing.image_loader import SUPPORTED_EXTENSIONS
+from colorcast.processing.image_loader import ALLOWED_IMAGE_EXTENSIONS
 
 
 def parse_args():
@@ -80,24 +80,18 @@ Examples:
         "--intensity",
         type=float,
         default=1.0,
-        min=0.0,
-        max=1.0,
         help="Blend intensity 0.0-1.0 (default: 1.0)",
     )
     transfer_parser.add_argument(
         "--shadow-threshold",
         type=float,
         default=0.3,
-        min=0.0,
-        max=1.0,
         help="Shadow threshold for selective methods (default: 0.3)",
     )
     transfer_parser.add_argument(
         "--highlight-threshold",
         type=float,
         default=0.7,
-        min=0.0,
-        max=1.0,
         help="Highlight threshold for selective methods (default: 0.7)",
     )
 
@@ -298,7 +292,7 @@ def cmd_info(args):
         print(f"License: {__license__}")
         print()
         print("Supported image formats:")
-        for ext in SUPPORTED_EXTENSIONS:
+        for ext in ALLOWED_IMAGE_EXTENSIONS:
             print(f"  {ext}")
         print()
         print("Use 'colorcast --help' for usage information.")
@@ -334,5 +328,27 @@ def main():
         sys.exit(1)
 
 
+def gui_main():
+    """Main entry point for the graphical interface."""
+    import argparse
+
+    from colorcast import __version__
+
+    parser = argparse.ArgumentParser(
+        prog="colorcast-gui",
+        description="Launch the ColorCast graphical interface.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"ColorCast {__version__}",
+    )
+    parser.parse_args()
+
+    from colorcast.gui import main as _run_gui
+
+    _run_gui()
+
+
 if __name__ == "__main__":
-    main()
+    gui_main()

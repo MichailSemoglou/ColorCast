@@ -9,9 +9,20 @@ This module provides comprehensive security-focused validation including:
 
 import os
 import math
-import imghdr
+try:
+    import imghdr as _imghdr
+    _HAS_IMGHDR = True
+except ImportError:
+    _imghdr = None  # type: ignore[assignment]
+    _HAS_IMGHDR = False
+try:
+    from PIL import Image as _PILImage
+    _HAS_PIL = True
+except ImportError:
+    _PILImage = None  # type: ignore[assignment]
+    _HAS_PIL = False
 from pathlib import Path
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional
 import numpy as np
 from colorcast.utils.exceptions import ValidationError
 from colorcast.utils.validators import ALLOWED_IMAGE_EXTENSIONS
@@ -142,8 +153,47 @@ def validate_image_file(
     )
     
     # Check actual file type using magic numbers
+    if not _HAS_IMGHDR:
+        if not _HAS_PIL:
+            raise ValidationError(
+                "Cannot validate image content: imghdr is unavailable "
+                "(Python 3.13+) and Pillow is not installed."
+            )
+        try:
+            with _PILImage.open(path_obj) as img:  # type: ignore[union-attr]
+                fmt = img.format  # capture before verify() consumes the stream
+                img.verify()
+        except ValidationError:
+            raise
+        except Exception as e:
+            raise ValidationError(f"File is not a valid image: {e}") from e
+
+        _pil_format_to_ext = {
+            'JPEG': '.jpg',
+            'PNG': '.png',
+            'BMP': '.bmp',
+            'TIFF': '.tif',
+            'GIF': '.gif',
+            'WEBP': '.webp',
+        }
+        path_ext = path_obj.suffix.lower()
+        expected_ext = _pil_format_to_ext.get(fmt or '')
+        if expected_ext == '.jpg' and path_ext in {'.jpg', '.jpeg'}:
+            return
+        if expected_ext == '.tif' and path_ext in {'.tif', '.tiff'}:
+            return
+        if expected_ext and expected_ext == path_ext:
+            return
+        if expected_ext:
+            raise ValidationError(
+                f"File type mismatch. Detected: {fmt}, "
+                f"Extension: {path_ext}. File may be corrupted or renamed."
+            )
+        # fmt is None or an unrecognised Pillow format; the file parsed and
+        # verified successfully so treat it as valid.
+        return
     try:
-        detected_type = imghdr.what(path)
+        detected_type = _imghdr.what(path)
     except Exception as e:
         raise ValidationError(f"Failed to read file: {e}")
     

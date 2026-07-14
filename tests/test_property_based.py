@@ -212,7 +212,7 @@ class TestBlendingProperties:
     """Tests for image blending properties."""
     
     @given(
-        source=arrays(float, shape=(100, 100, 3), elements=st.floats(0, 255, allow_nan=False, allow_infinity=False)),
+        source=arrays(float, shape=(100, 100, 3), elements=st.floats(0, 1, allow_nan=False, allow_infinity=False)),
         intensity=st.floats(0, 1, allow_nan=False, allow_infinity=False)
     )
     @settings(custom_settings)
@@ -223,7 +223,7 @@ class TestBlendingProperties:
         assert result.shape == source.shape
     
     @given(
-        source=arrays(float, shape=(50, 50, 3), elements=st.floats(0, 255, allow_nan=False, allow_infinity=False)),
+        source=arrays(float, shape=(50, 50, 3), elements=st.floats(0, 1, allow_nan=False, allow_infinity=False)),
         intensity=st.floats(0, 1, allow_nan=False, allow_infinity=False)
     )
     @settings(custom_settings)
@@ -232,10 +232,10 @@ class TestBlendingProperties:
         modified = source.copy()
         result = blend_images(source, modified, intensity)
         assert np.all(result >= 0)
-        assert np.all(result <= 255)
+        assert np.all(result <= 1)
     
     @given(
-        source=arrays(float, shape=(50, 50, 3), elements=st.floats(0, 255, allow_nan=False, allow_infinity=False))
+        source=arrays(float, shape=(50, 50, 3), elements=st.floats(0, 1, allow_nan=False, allow_infinity=False))
     )
     @settings(custom_settings)
     def test_zero_intensity_returns_source(self, source):
@@ -245,22 +245,22 @@ class TestBlendingProperties:
         np.testing.assert_array_equal(result, source)
     
     @given(
-        source=arrays(float, shape=(50, 50, 3), elements=st.floats(0, 255, allow_nan=False, allow_infinity=False))
+        source=arrays(float, shape=(50, 50, 3), elements=st.floats(0, 1, allow_nan=False, allow_infinity=False))
     )
     @settings(custom_settings)
     def test_full_intensity_returns_modified(self, source):
         """Blending with intensity 1.0 should return modified."""
-        modified = source.copy() * 2  # Make it different
+        modified = 1.0 - source  # Different, but still in [0, 1]
         result = blend_images(source, modified, intensity=1.0)
         np.testing.assert_array_equal(result, modified)
     
     @given(
-        source=arrays(float, shape=(50, 50, 3), elements=st.floats(0, 255, allow_nan=False, allow_infinity=False))
+        source=arrays(float, shape=(50, 50, 3), elements=st.floats(0, 1, allow_nan=False, allow_infinity=False))
     )
     @settings(custom_settings)
     def test_blending_is_linear(self, source):
         """Blending should be linear with intensity."""
-        modified = source.copy() + 50
+        modified = source.copy() * 0.5 + 0.2  # Different, but stays in [0, 1]
         
         # Test at several intensity levels
         for intensity in [0.0, 0.5, 1.0]:

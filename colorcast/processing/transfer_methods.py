@@ -48,7 +48,7 @@ def match_histograms_multichannel(source: np.ndarray, reference: np.ndarray) -> 
     Based on histogram matching algorithm described in:
     Gonzalez, R. C., & Woods, R. E. (2017).
     Digital Image Processing (4th ed.). Pearson.
-    pp. 128-131
+    pp. 156-163
 
     The algorithm maps cumulative distribution function (CDF)
     of source image to CDF of reference image,
@@ -74,10 +74,9 @@ def color_transfer_meanstd(source: np.ndarray, reference: np.ndarray) -> np.ndar
     """
     Transfer color using mean and standard deviation matching per channel.
 
-    Based on statistical color transfer method from:
-    Reinhard, E., Adhikhmin, M., Gooch, B., & Shirley, P. (2001).
-    Color transfer between images.
-    IEEE Computer Graphics and Applications, 21(5), 34-41.
+    This is a simplified per-channel RGB normalization.  For the canonical
+    Lab-space statistical transfer, see `color_transfer_lab` (Reinhard et al.,
+    2001).
 
     This method matches first and second moments (mean and
     standard deviation) of each color channel independently,
@@ -153,9 +152,10 @@ def color_transfer_lab(
     Transfer color using Lab color space with statistical matching (Reinhard method).
 
     Based on seminal paper:
-    Reinhard, E., Adhikhmin, M., Gooch, B., & Shirley, P. (2001).
+    Reinhard, E., Ashikhmin, M., Gooch, B., & Shirley, P. (2001).
     Color transfer between images.
     IEEE Computer Graphics and Applications, 21(5), 34-41.
+    DOI: 10.1109/38.946629.
 
     This method operates in L*a*b* color space, which is
     perceptually uniform and separates luminance (L) from chromaticity (a, b).

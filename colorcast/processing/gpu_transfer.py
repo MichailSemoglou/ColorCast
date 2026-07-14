@@ -5,7 +5,6 @@ This module provides GPU implementations of color transfer algorithms
 for improved performance on large images and batch processing.
 """
 
-from typing import Literal, Optional
 import numpy as np
 
 # Try to import CuPy, fallback gracefully if not available
@@ -43,11 +42,7 @@ def gpu_histogram_matching(
             )
         return result.astype(source.dtype)
     
-    # Convert to GPU arrays
-    source_gpu = cp.asarray(source)
-    reference_gpu = cp.asarray(reference)
-    
-    # Transfer to GPU memory
+    # Convert to GPU arrays (float32)
     source_gpu = cp.asarray(source, dtype=cp.float32)
     reference_gpu = cp.asarray(reference, dtype=cp.float32)
     
@@ -157,8 +152,7 @@ def gpu_lab_transfer(
     if not HAS_CUPY:
         # Fallback to CPU implementation
         from skimage import color
-        result = np.empty_like(source)
-        
+
         # Clamp alpha
         alpha = np.clip(alpha, 0.0, 1.0)
         
@@ -198,60 +192,41 @@ def gpu_lab_transfer(
         result_rgb = np.clip(result_rgb, 0, 1).astype(source.dtype)
         
         return result_rgb
-    
-    # Convert to GPU arrays in range [0, 1]
-    source_gpu = cp.asarray(source, dtype=cp.float32)
-    reference_gpu = cp.asarray(reference, dtype=cp.float32)
-    
+
     # Clamp alpha
     alpha = float(alpha)
     alpha = max(0.0, min(1.0, alpha))
-    
-    # Convert RGB to Lab color space (requires GPU implementation)
-    # For now, convert to CPU, transfer, then back to GPU
+
+    # CuPy has no rgb2lab/lab2rgb equivalent. Routing through the CPU
+    # implementation avoids mixing CPU color-space conversions with GPU
+    # statistics operations and the two full-frame transfers that implies.
     from skimage import color
-    
-    source_lab_cpu = color.rgb2lab(source)
-    reference_lab_cpu = color.rgb2lab(reference)
-    
-    # Transfer to GPU
-    source_lab = cp.asarray(source_lab_cpu, dtype=cp.float32)
-    reference_lab = cp.asarray(reference_lab_cpu, dtype=cp.float32)
-    
-    # Compute statistics in Lab space on GPU
-    result_lab_gpu = cp.empty_like(source_lab)
+
+    source_lab = color.rgb2lab(source)
+    reference_lab = color.rgb2lab(reference)
+
+    result_lab = np.empty_like(source_lab)
     for i in range(3):
-        # Compute mean and std for source and reference
-        source_mean = cp.mean(source_lab[:, :, i])
-        source_std = cp.std(source_lab[:, :, i])
-        ref_mean = cp.mean(reference_lab[:, :, i])
-        ref_std = cp.std(reference_lab[:, :, i])
-        
-        # Apply statistical transfer
+        source_mean = np.mean(source_lab[:, :, i])
+        source_std = np.std(source_lab[:, :, i])
+        ref_mean = np.mean(reference_lab[:, :, i])
+        ref_std = np.std(reference_lab[:, :, i])
+
         epsilon = 1e-8
-        result_lab_gpu[:, :, i] = (
+        result_lab[:, :, i] = (
             (source_lab[:, :, i] - source_mean)
             * (ref_std / (source_std + epsilon))
         ) + ref_mean
-    
-    # Clip to valid Lab ranges
-    result_lab_gpu[:, :, 0] = cp.clip(result_lab_gpu[:, :, 0], 0, 100)  # L channel
-    result_lab_gpu[:, :, 1] = cp.clip(result_lab_gpu[:, :, 1], -128, 127)  # a channel
-    result_lab_gpu[:, :, 2] = cp.clip(result_lab_gpu[:, :, 2], -128, 127)  # b channel
-    
-    # Apply alpha blending for partial transfer
+
+    result_lab[:, :, 0] = np.clip(result_lab[:, :, 0], 0, 100)
+    result_lab[:, :, 1] = np.clip(result_lab[:, :, 1], -128, 127)
+    result_lab[:, :, 2] = np.clip(result_lab[:, :, 2], -128, 127)
+
     if alpha < 1.0:
-        result_lab_gpu = source_lab * (1 - alpha) + result_lab_gpu * alpha
-    
-    # Convert Lab back to RGB on CPU (color.lab2rgb is not available in CuPy)
-    result_lab_cpu = cp.asnumpy(result_lab_gpu)
-    from skimage import color
-    result_rgb = color.lab2rgb(result_lab_cpu)
-    
-    # Ensure result is in valid range [0, 1]
-    result_rgb = np.clip(result_rgb, 0, 1).astype(source.dtype)
-    
-    return result_rgb
+        result_lab = source_lab * (1 - alpha) + result_lab * alpha
+
+    result_rgb = color.lab2rgb(result_lab)
+    return np.clip(result_rgb, 0, 1).astype(source.dtype)
 
 
 def gpu_histogram_matching_multichannel(

@@ -2,7 +2,7 @@
 include README.md
 include LICENSE
 include CITATION.cff
-include RELEASE_NOTES.md
+include CHANGELOG.md
 include requirements.txt
 include requirements-dev.txt
 
@@ -10,7 +10,7 @@ include requirements-dev.txt
 include pyproject.toml
 
 # Include documentation
-recursive-include docs *.rst *.py *.md
+recursive-include docs *.rst *.py
 
 # Include tests
 recursive-include tests *.py

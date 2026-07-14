@@ -56,7 +56,7 @@ class MethodComparison:
             >>> ssim_val = MethodComparison.compute_ssim(img1, img2)
             >>> print(f"SSIM: {ssim_val:.4f}")
         """
-        return ssim(img1, img2, multichannel=True, data_range=1.0)
+        return ssim(img1, img2, channel_axis=-1, data_range=1.0)
     
     @staticmethod
     def compute_color_distance(source: np.ndarray, result: np.ndarray) -> float:

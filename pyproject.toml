@@ -1,7 +1,7 @@
 [project]
 name = "colorcast"
-version = "2.0.0"
-description = "Advanced color and style transfer toolkit for images"
+version = "2.1.1"
+description = "Color and style transfer toolkit for images"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -25,8 +25,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy>=1.20.0,<2.0.0",
-    "scikit-image>=0.18.0,<0.22.0",
+    "numpy>=1.20.0,<3.0.0",
+    "scikit-image>=0.19.0,<1.0.0",
     "PyQt5>=5.15.0,<6.0.0",
     "scipy>=1.7.0,<2.0.0",
 ]
@@ -72,11 +72,15 @@ all = ["colorcast[dev,docs,gpu,analysis]"]
 
 [project.scripts]
 colorcast = "colorcast.__main__:main"
-colorcast-gui = "colorcast.__main__:main"
+colorcast-gui = "colorcast.__main__:gui_main"
 
 [build-system]
 requires = ["setuptools>=65.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests*"]
 
 [tool.black]
 line-length = 100

@@ -1,26 +1,26 @@
 ColorCast Documentation
 =====================
 
-.. image:: https://img.shields.io/badge/version-1.0.0-blue.svg
+.. image:: https://img.shields.io/badge/version-2.1.1-blue.svg
    :target: https://github.com/MichailSemoglou/ColorCast
    :alt: Version
 
-.. image:: https://img.shields.io/badge/python-3.8+-green.svg
+.. image:: https://img.shields.io/badge/python-3.10%2B-green.svg
    :target: https://www.python.org/downloads/
    :alt: Python Version
 
-ColorCast is a comprehensive Python library for color transfer between images,
-providing multiple algorithms, GPU acceleration, and academic-grade analysis tools.
+ColorCast is a Python library for color and style transfer between images,
+providing multiple algorithms, GPU acceleration, and analysis tools.
 
 **Features:**
 
 * Multiple color transfer algorithms (histogram matching, mean/std, Lab space, LUT-based)
 * GPU acceleration with CuPy (10-50x speedup on supported hardware)
 * Selective color transfer (shadows, midtones, highlights)
-* Advanced blending and intensity control
+* Blending and intensity control
 * Batch processing for multiple images
 * Caching for performance optimization
-* Comprehensive academic analysis tools (PSNR, SSIM, color metrics)
+* Analysis tools (PSNR, SSIM, color metrics)
 * Visualization utilities for comparing methods
 * Property-based testing for correctness
 
