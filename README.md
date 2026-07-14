@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Code Coverage](https://img.shields.io/badge/coverage-44%25-orange.svg)](tests/)
 [![Tests](https://img.shields.io/badge/tests-159%20passed-brightgreen.svg)](tests/)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18550039.svg)](https://doi.org/10.5281/zenodo.18550039)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18550038.svg)](https://doi.org/10.5281/zenodo.18550038)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/colorcast?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/colorcast)
 
 **ColorCast** is a Python toolkit for color and style transfer between images. It provides histogram matching, mean/std transfer, LUT-based curves (linear, S-curve, contrast), and selective regional color transfer across shadows, midtones, and highlights. Color-vision-deficiency simulation covers deuteranopia, protanopia, and tritanopia; the Daltonization pipeline corrects images for dichromatic observers.
