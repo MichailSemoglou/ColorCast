@@ -36,9 +36,13 @@
 
 ## Interface
 
-![ColorCast Interface](interface.png)
+![ColorCast Interface](imgs/interface.png)
 
 _ColorCast's intuitive interface showing content image, style image, and result panels_
+
+![ColorCast Daltonize (P) mode](imgs/interface_2.png)
+
+_Daltonize (P) mode correcting an image for protanopia, with correction intensity control_
 
 ## Installation
 
