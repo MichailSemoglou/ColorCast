@@ -26,7 +26,7 @@ In information-theoretic terms, dichromacy is a lossy dimensionality reduction o
 
 ## Simulation Pipeline
 
-`ColorBlindSimulator` in `colorcast/processing/simulation.py` converts an RGB image to approximate how a dichromat would perceive it. The pipeline is conceptually the standard sRGB → linear RGB → LMS → projected LMS → linear RGB → sRGB route (Brettel, Viénot, & Mollon, 1997; Viénot, Brettel, & Mollon, 1999), but the RGB → LMS → projection → LMS → RGB chain is pre-computed into a single linear RGB matrix per deficiency using the Smith-Pokorny (1975) cone fundamentals (DaltonLens, 2021):
+`ColorBlindSimulator` in `colorcast/processing/simulation.py` converts an RGB image to approximate how a dichromat would perceive it. The pipeline is conceptually the standard sRGB → linear RGB → LMS → projected LMS → linear RGB → sRGB route (Brettel, Viénot, & Mollon, 1997; Viénot, Brettel, & Mollon, 1999), but the RGB → LMS → projection → LMS → RGB chain is pre-computed into a single linear RGB matrix per deficiency using the Smith-Pokorny (1975) cone fundamentals (DaltonLens, 2021b):
 
 1. Normalize input to float32 in [0, 1]. Input is assumed to be nonlinear sRGB (CIE, 2004).
 2. Gamma-decode sRGB to linear RGB.
@@ -46,7 +46,7 @@ Each matrix row sums to 1, so achromatic whites and grays are preserved by const
 
 Tritanopia (S-cone loss) produces a visually distinct simulation compared with Protanopia or Deuteranopia because of the luminance contribution of each cone type.
 
-Photopic luminance is dominated by L and M cones, while the S cone contributes a negligible amount. In the classic MacLeod-Boynton formulation, L and M together carry essentially all luminance, with M contributing a substantial fraction (roughly one-third to one-half) and S effectively zero. Because of this:
+Photopic luminance is dominated by L and M cones, while the S cone contributes a negligible amount (MacLeod & Boynton, 1979). Vos and Walraven (1971) estimate the L:M luminance-weight ratio at roughly 2:1, meaning M contributes on the order of one-third of the combined L+M luminance signal, while S contributes essentially nothing. Because of this:
 
 - **Protanopia** removes L, which carries a large share of luminance, so the image loses contrast and saturated reds appear very dark.
 - **Deuteranopia** removes M; greens shift, but perceived brightness is relatively preserved because L still carries most luminance.
@@ -141,9 +141,12 @@ This preserves global brightness and ensures the only change is in the (`a*`, `b
 ## References
 
 - Brettel, H., Viénot, F., & Mollon, J. D. (1997). Computerized simulation of color appearance for dichromats. _Journal of the Optical Society of America A_, 14(10), 2647-2655. DOI: 10.1364/josaa.14.002647.
-- DaltonLens. (2021). Accurate SVG filters for color blindness simulation. https://daltonlens.org/cvd-simulation-svg-filters/.
 - Commission Internationale de l'Éclairage. (2004). _Colorimetry_ (3rd ed.) (CIE Publication No. 15:2004). CIE.
+- DaltonLens. (2021a). Understanding LMS-based color blindness simulations. https://daltonlens.org/understanding-cvd-simulation/.
+- DaltonLens. (2021b). Accurate SVG filters for color blindness simulation. https://daltonlens.org/cvd-simulation-svg-filters/.
 - Huang, J.-B., Chen, C.-S., Jen, T.-C., & Wang, S.-J. (2009). Image recolorization for the colorblind. In _Proceedings of the IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)_, pp. 1161-1164. DOI: 10.1109/ICASSP.2009.4959795.
-- Rasche, K., Geist, R., & Westall, J. (2005). Re-coloring images for gamuts of lower dimension. _Computer Graphics Forum_, 24(3), 423-432. DOI: 10.1111/j.1467-8659.2005.00867.x.
+- MacLeod, D. I. A., & Boynton, R. M. (1979). Chromaticity diagram showing cone excitation by stimuli of equal luminance. _Journal of the Optical Society of America_, 69(8), 1183-1186. DOI: 10.1364/josa.69.001183.
+- Rasche, K., Geist, R., & Westall, J. (2005). Re-coloring Images for gamuts of lower dimension. _Computer Graphics Forum_, 24(3), 423-432. DOI: 10.1111/j.1467-8659.2005.00867.x.
 - Smith, V. C., & Pokorny, J. (1975). Spectral sensitivity of the foveal cone photopigments between 400 and 500 nm. _Vision Research_, 15(2), 161-171. DOI: 10.1016/0042-6989(75)90203-5.
 - Viénot, F., Brettel, H., & Mollon, J. D. (1999). Digital video colourmaps for checking the legibility of displays by dichromats. _Color Research & Application_, 24(4), 243-252. DOI: 10.1002/(SICI)1520-6378(199908)24:4<243::AID-COL5>3.0.CO;2-3.
+- Vos, J. J., & Walraven, P. L. (1971). On the derivation of the foveal receptor primaries. _Vision Research_, 11(8), 799-818. DOI: 10.1016/0042-6989(71)90003-4.

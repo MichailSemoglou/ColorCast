@@ -79,6 +79,9 @@ softwareX/
 # Kimi Code CLI local instructions
 .kimi/instructions.md
 
+# Local agent instructions (local development only)
+.github/instructions.md
+
 # Project agent instructions (local development only)
 /AGENTS.md
 

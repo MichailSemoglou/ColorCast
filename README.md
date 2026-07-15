@@ -2,12 +2,12 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Coverage](https://img.shields.io/badge/coverage-44%25-orange.svg)](tests/)
-[![Tests](https://img.shields.io/badge/tests-159%20passed-brightgreen.svg)](tests/)
+[![Code Coverage](https://img.shields.io/badge/coverage-43%25-orange.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-162%20passed-brightgreen.svg)](tests/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18550038.svg)](https://doi.org/10.5281/zenodo.18550038)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/colorcast?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/colorcast)
 
-**ColorCast** is a Python toolkit for color and style transfer between images. It provides histogram matching, mean/std transfer, LUT-based curves (linear, S-curve, contrast), and selective regional color transfer across shadows, midtones, and highlights. Color-vision-deficiency simulation covers deuteranopia, protanopia, and tritanopia; the Daltonization pipeline corrects images for dichromatic observers.
+**ColorCast** is a Python toolkit for color and style transfer between images. It provides histogram matching, mean/std transfer, LUT-based curves (linear, S-curve, contrast), and selective regional color transfer across shadows, midtones, and highlights. Color-vision-deficiency simulation covers deuteranopia, protanopia, and tritanopia; the Daltonization pipeline re-encodes the chromatic information these deficiencies would otherwise hide, shifting it into a channel the affected observer can still perceive.
 
 ## Features
 
@@ -18,7 +18,7 @@
 - **Selective Regional Transfer** - Target shadows, midtones, or highlights specifically
 - **Modular Package** - Use as Python API or run GUI/CLI
 - **Performance Optimized** - LRU caching and batch processing support
-- **Tested** - 44% test coverage with 159 passing tests
+- **Tested** - 43% test coverage with 162 passing tests
 - **Documented** - API documentation and examples
 - **Plugin Architecture** - Easy to add custom transfer methods
 
@@ -293,61 +293,6 @@ print(f"Cache hits: {stats['hits']}, misses: {stats['misses']}")
 - Higher resolution images produce better quality transfers
 - For selective transfer, ensure good dynamic range in both images
 
-## Project Structure
-
-```
-colorcast/
-├── colorcast/                     # Main package
-│   ├── __init__.py                # Package exports
-│   ├── __main__.py                # CLI and GUI entry points
-│   ├── gui.py                     # PyQt5 graphical interface
-│   ├── analysis/                  # Analysis and correction tools
-│   │   ├── __init__.py
-│   │   ├── comparison.py          # Side-by-side method comparison
-│   │   ├── daltonization.py       # Color-vision-deficiency correction
-│   │   ├── error_map.py           # Chromatic error analysis
-│   │   └── visualization.py       # Plotting helpers
-│   ├── processing/                # Processing modules
-│   │   ├── __init__.py
-│   │   ├── image_loader.py        # Image I/O
-│   │   ├── transfer_methods.py    # Color transfer algorithms
-│   │   ├── blending.py            # Intensity blending
-│   │   ├── curves.py              # Tone curves
-│   │   ├── registry.py            # Plugin system
-│   │   ├── cache.py               # LRU cache
-│   │   ├── batch.py               # Batch processing
-│   │   ├── simulation.py          # Color-vision-deficiency simulation
-│   │   └── gpu_transfer.py        # GPU-accelerated transfers
-│   └── utils/                     # Utility modules
-│       ├── __init__.py
-│       ├── config.py              # Configuration
-│       ├── exceptions.py          # Custom exceptions
-│       ├── validators.py          # Input validation
-│       └── validators_enhanced.py # Extended validation helpers
-├── tests/                         # Test suite
-│   ├── __init__.py
-│   ├── test_image_loading.py
-│   ├── test_transfer_methods.py
-│   ├── test_blending.py
-│   ├── test_cache.py
-│   ├── test_batch.py
-│   ├── test_color_blindness.py
-│   ├── test_entry_points.py
-│   ├── test_integration.py
-│   ├── test_integration_comprehensive.py
-│   ├── test_lab_transfer.py
-│   ├── test_performance.py
-│   └── test_property_based.py
-├── colorcast.py                   # Deprecated compatibility shim for the GUI
-├── pyproject.toml                 # Modern Python packaging
-├── requirements.txt               # Runtime requirements
-├── requirements-dev.txt           # Development requirements
-├── README.md                      # This file
-├── CHANGELOG.md                   # Release history
-├── CITATION.cff                   # Citation metadata
-└── AGENTS.md                      # Repository writing guide
-```
-
 ## Testing
 
 Run the test suite:
@@ -366,7 +311,7 @@ pytest tests/test_transfer_methods.py
 pytest -v
 ```
 
-**Test Coverage:** 44% (159 passing tests, 1 skipped)
+**Test Coverage:** 43% (162 passing tests, 1 skipped)
 
 - Core transfer methods: 99% coverage
 - Full test suite including integration, performance, and property-based tests
