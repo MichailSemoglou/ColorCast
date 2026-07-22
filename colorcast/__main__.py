@@ -5,13 +5,11 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+
 from colorcast import (
     load_image,
     save_image,
-    match_histograms_multichannel,
-    color_transfer_meanstd,
-    lut_transfer_with_curve,
-    selective_color_transfer,
     blend_images,
     registry,
 )
@@ -59,7 +57,8 @@ Examples:
     transfer_parser.add_argument(
         "style",
         type=Path,
-        help="Path to style image",
+        nargs="?",
+        help="Path to style image (not required for simulate_* methods)",
     )
     transfer_parser.add_argument(
         "-o",
@@ -108,7 +107,8 @@ Examples:
     batch_parser.add_argument(
         "style",
         type=Path,
-        help="Path to style image",
+        nargs="?",
+        help="Path to style image (not required for simulate_* methods)",
     )
     batch_parser.add_argument(
         "-o",
@@ -158,50 +158,32 @@ Examples:
     return parser.parse_args()
 
 
-def get_transfer_function(method_id: str):
-    """
-    Get transfer function by method ID.
-
-    Args:
-        method_id: Method identifier
-
-    Returns:
-        Transfer function
-    """
-    methods = {
-        "histogram": match_histograms_multichannel,
-        "meanstd": color_transfer_meanstd,
-        "lut_linear": lambda s, r: lut_transfer_with_curve(s, r, "linear"),
-        "lut_scurve": lambda s, r: lut_transfer_with_curve(s, r, "s-curve"),
-        "lut_contrast": lambda s, r: lut_transfer_with_curve(s, r, "contrast"),
-        "selective_shadows": lambda s, r: selective_color_transfer(
-            s, r, mode="shadows"
-        ),
-        "selective_midtones": lambda s, r: selective_color_transfer(
-            s, r, mode="midtones"
-        ),
-        "selective_highlights": lambda s, r: selective_color_transfer(
-            s, r, mode="highlights"
-        ),
-    }
-    return methods.get(method_id, match_histograms_multichannel)
-
-
 def cmd_transfer(args):
     """Handle transfer command."""
+    method = registry.get_method(args.method)
+
     print(f"Loading content image: {args.content}")
     content = load_image(str(args.content))
-    print(f"Loading style image: {args.style}")
-    style = load_image(str(args.style))
+
+    if method.requires_reference:
+        if args.style is None:
+            raise ValueError(
+                f"Method '{args.method}' requires a style image. "
+                "Pass one as the second positional argument."
+            )
+        print(f"Loading style image: {args.style}")
+        style: Optional[np.ndarray] = load_image(str(args.style))
+    else:
+        # Simulator methods transform the content image alone.
+        style = None
 
     print(f"Applying {args.method} transfer...")
-    transfer_func = get_transfer_function(args.method)
-
-    # Apply transfer with parameters
-    if args.method.startswith("selective"):
-        result = transfer_func(content, style)
-    else:
-        result = transfer_func(content, style)
+    result = method.transfer(
+        content,
+        style,
+        shadow_threshold=args.shadow_threshold,
+        highlight_threshold=args.highlight_threshold,
+    )
 
     # Apply intensity blending
     if args.intensity < 1.0:
@@ -218,16 +200,24 @@ def cmd_transfer(args):
 
 def cmd_batch(args):
     """Handle batch command."""
-    print(f"Loading style image: {args.style}")
-    style = load_image(str(args.style))
-
-    print(f"Starting batch processing...")
+    print("Starting batch processing...")
     print(f"Content directory: {args.content_dir}")
     print(f"Output directory: {args.output}")
     print(f"Method: {args.method}")
     print(f"Workers: {args.workers}")
 
-    transfer_func = get_transfer_function(args.method)
+    method = registry.get_method(args.method)
+
+    if method.requires_reference:
+        if args.style is None:
+            raise ValueError(
+                f"Method '{args.method}' requires a style image. "
+                "Pass one as the second positional argument."
+            )
+        style_image: Optional[Path] = args.style
+    else:
+        # Simulator methods transform each content image alone.
+        style_image = None
 
     # Progress callback
     def progress_callback(processed, total):
@@ -236,20 +226,20 @@ def cmd_batch(args):
 
     # Process batch
     processor = BatchProcessor(
-        transfer_method=transfer_func,
+        transfer_method=method.transfer,
         max_workers=args.workers,
         progress_callback=progress_callback,
     )
 
     results = processor.process_directory(
         content_dir=args.content_dir,
-        style_image=args.style,
+        style_image=style_image,
         output_dir=args.output,
         pattern=args.pattern,
     )
 
     # Report results
-    print(f"\nBatch processing complete!")
+    print("\nBatch processing complete!")
     print(f"Successfully processed: {len(results)} files")
     if processor.failed_files:
         print(f"Failed: {len(processor.failed_files)} files")

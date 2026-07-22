@@ -24,6 +24,7 @@ from PyQt5.QtWidgets import (
 )
 from colorcast import (
     blend_images,
+    color_transfer_lab,
     color_transfer_meanstd,
     lut_transfer_with_curve,
     match_histograms_multichannel,
@@ -35,8 +36,6 @@ from colorcast.processing.image_loader import ImageMeta, load_image_with_meta
 from colorcast.utils.exceptions import ImageProcessingError
 from colorcast.processing.simulation import ColorBlindSimulator
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Module-level constants
@@ -133,6 +132,7 @@ class StyleTransferApp(QWidget):
         _combo_model.appendRow(_header("  STYLIZE"))
         _combo_model.appendRow(_entry("Histogram Match", "histogram"))
         _combo_model.appendRow(_entry("Reinhard (Mean/Std)", "meanstd"))
+        _combo_model.appendRow(_entry("Lab (Reinhard)", "lab_reinhard"))
         _combo_model.appendRow(_entry("LUT: Linear", "lut_linear"))
         _combo_model.appendRow(_entry("LUT: S-Curve", "lut_scurve"))
         _combo_model.appendRow(_entry("LUT: Contrast", "lut_contrast"))
@@ -417,6 +417,10 @@ class StyleTransferApp(QWidget):
                     self.styled_image = color_transfer_meanstd(
                         self.content_image, self.style_image
                     )
+                elif self.transfer_method == "lab_reinhard":
+                    self.styled_image = color_transfer_lab(
+                        self.content_image, self.style_image
+                    )
                 elif self.transfer_method == "lut_linear":
                     self.styled_image = lut_transfer_with_curve(
                         self.content_image, self.style_image, "linear"
@@ -549,6 +553,7 @@ class StyleTransferApp(QWidget):
 
 def main() -> None:
     """Run the ColorCast graphical application."""
+    logging.basicConfig(level=logging.INFO)
     app = QApplication([])
     window = StyleTransferApp()
     window.show()

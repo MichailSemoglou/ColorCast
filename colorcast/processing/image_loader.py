@@ -39,6 +39,11 @@ def ensure_rgb(img: np.ndarray) -> np.ndarray:
     """
     Convert image to RGB format, handling grayscale and RGBA images.
 
+    RGBA images are composited onto a white background
+    (``out = rgb * alpha + white * (1 - alpha)``) instead of discarding the
+    alpha channel, so transparent pixels do not produce wrong colors. The
+    input dtype is preserved.
+
     Args:
         img: Input image array (2D, 3D with 1, 3, or 4 channels)
 
@@ -56,7 +61,27 @@ def ensure_rgb(img: np.ndarray) -> np.ndarray:
         elif img.shape[2] == 3:
             return img
         elif img.shape[2] == 4:
-            return img[:, :, :3]
+            if np.issubdtype(img.dtype, np.signedinteger):
+                raise InvalidImageFormatError(
+                    f"Signed integer dtype '{img.dtype}' is not supported for "
+                    "RGBA compositing. Convert to an unsigned integer or "
+                    "float dtype first."
+                )
+            if np.issubdtype(img.dtype, np.integer):
+                if img.dtype.itemsize > 4:
+                    raise InvalidImageFormatError(
+                        f"RGBA compositing of '{img.dtype}' images is not "
+                        "supported. Convert to float first."
+                    )
+                maxval = float(np.iinfo(img.dtype).max)
+            else:
+                maxval = 1.0
+            rgb = img[:, :, :3].astype(np.float64) / maxval
+            alpha = img[:, :, 3:4].astype(np.float64) / maxval
+            composited: np.ndarray = np.clip(rgb * alpha + (1.0 - alpha), 0.0, 1.0)
+            if np.issubdtype(img.dtype, np.integer):
+                composited = np.round(composited * maxval)
+            return composited.astype(img.dtype)
         else:
             raise InvalidImageFormatError(
                 f"Unsupported number of channels: {img.shape[2]}"
@@ -181,11 +206,14 @@ def save_image(img_array: np.ndarray, path: str) -> None:
     Save image with path validation.
 
     Args:
-        img_array: Image array to save (float [0,1] or uint8 [0,255])
+        img_array: Image array to save (float32/float64 in [0, 1] or uint8
+            in [0, 255])
         path: Path where image will be saved
 
     Raises:
         ValidationError: If path is invalid
+        InvalidImageFormatError: If the array dtype is not float32, float64,
+            or uint8
         ImageProcessingError: If save fails
     """
     from colorcast.utils.exceptions import ImageProcessingError
@@ -198,14 +226,19 @@ def save_image(img_array: np.ndarray, path: str) -> None:
             f"Invalid file extension. Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}"
         )
 
-    # Ensure directory exists
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-
-    # Convert to uint8 if needed
+    # Validate dtype and convert to uint8 if needed
     if img_array.dtype == np.float64 or img_array.dtype == np.float32:
         save_img = (np.clip(img_array, 0, 1) * 255).astype(np.uint8)
-    else:
+    elif img_array.dtype == np.uint8:
         save_img = img_array
+    else:
+        raise InvalidImageFormatError(
+            f"Unsupported dtype for saving: {img_array.dtype}. "
+            "Convert to float32, float64, or uint8 before saving."
+        )
+
+    # Ensure directory exists
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
 
     # Save with error handling
     try:

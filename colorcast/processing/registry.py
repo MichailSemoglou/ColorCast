@@ -1,7 +1,7 @@
 """Plugin architecture for transfer methods."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Type, Any
+from typing import Any, Dict, Optional, Type
 import numpy as np
 
 
@@ -25,11 +25,32 @@ class TransferMethod(ABC):
         """Configurable parameters and their defaults."""
         return {}
 
+    #: Whether the method needs a reference (style) image. Methods that
+    #: transform the source image alone, such as the CVD simulators, set
+    #: this to False; callers may then pass ``reference=None``.
+    requires_reference: bool = True
+
+    def _require_reference(self, reference: Optional[np.ndarray]) -> np.ndarray:
+        """Validate that a reference image was provided.
+
+        Args:
+            reference: Reference image passed to ``transfer``
+
+        Returns:
+            The validated reference image
+
+        Raises:
+            ValueError: If ``reference`` is None
+        """
+        if reference is None:
+            raise ValueError(f"{self.id} requires a reference image")
+        return reference
+
     @abstractmethod
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         **kwargs: Any,
     ) -> np.ndarray:
         """
@@ -37,7 +58,8 @@ class TransferMethod(ABC):
 
         Args:
             source: Source image (H, W, 3)
-            reference: Reference image (H, W, 3)
+            reference: Reference image (H, W, 3), or None for methods with
+                ``requires_reference = False``
             **kwargs: Method-specific parameters
 
         Returns:
@@ -132,9 +154,11 @@ class HistogramMatchingMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         **kwargs: Any,
     ) -> np.ndarray:
+        reference = self._require_reference(reference)
+
         from colorcast.processing.transfer_methods import match_histograms_multichannel
 
         return match_histograms_multichannel(source, reference)
@@ -155,9 +179,11 @@ class MeanStdTransferMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         **kwargs: Any,
     ) -> np.ndarray:
+        reference = self._require_reference(reference)
+
         from colorcast.processing.transfer_methods import color_transfer_meanstd
 
         return color_transfer_meanstd(source, reference)
@@ -189,10 +215,12 @@ class LabTransferMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         alpha: float = 1.0,
         **kwargs: Any,
     ) -> np.ndarray:
+        reference = self._require_reference(reference)
+
         from colorcast.processing.transfer_methods import color_transfer_lab
 
         return color_transfer_lab(source, reference, alpha=alpha)
@@ -213,9 +241,11 @@ class LutLinearMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         **kwargs: Any,
     ) -> np.ndarray:
+        reference = self._require_reference(reference)
+
         from colorcast.processing.transfer_methods import lut_transfer_with_curve
 
         return lut_transfer_with_curve(source, reference, "linear")
@@ -236,9 +266,11 @@ class LutSCurveMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         **kwargs: Any,
     ) -> np.ndarray:
+        reference = self._require_reference(reference)
+
         from colorcast.processing.transfer_methods import lut_transfer_with_curve
 
         return lut_transfer_with_curve(source, reference, "s-curve")
@@ -259,9 +291,11 @@ class LutContrastMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         **kwargs: Any,
     ) -> np.ndarray:
+        reference = self._require_reference(reference)
+
         from colorcast.processing.transfer_methods import lut_transfer_with_curve
 
         return lut_transfer_with_curve(source, reference, "contrast")
@@ -293,10 +327,12 @@ class SelectiveShadowsMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         shadow_threshold: float = 0.3,
         **kwargs: Any,
     ) -> np.ndarray:
+        reference = self._require_reference(reference)
+
         from colorcast.processing.transfer_methods import selective_color_transfer
 
         return selective_color_transfer(
@@ -336,11 +372,13 @@ class SelectiveMidtonesMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         shadow_threshold: float = 0.3,
         highlight_threshold: float = 0.7,
         **kwargs: Any,
     ) -> np.ndarray:
+        reference = self._require_reference(reference)
+
         from colorcast.processing.transfer_methods import selective_color_transfer
 
         return selective_color_transfer(
@@ -378,10 +416,12 @@ class SelectiveHighlightsMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         highlight_threshold: float = 0.7,
         **kwargs: Any,
     ) -> np.ndarray:
+        reference = self._require_reference(reference)
+
         from colorcast.processing.transfer_methods import selective_color_transfer
 
         return selective_color_transfer(
@@ -407,10 +447,12 @@ class DeuteranopiaSimulatorMethod(TransferMethod):
     def id(self) -> str:
         return "simulate_deuteranopia"
 
+    requires_reference = False
+
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         **kwargs: Any,
     ) -> np.ndarray:
         from colorcast.processing.simulation import ColorBlindSimulator
@@ -430,10 +472,12 @@ class ProtanopiaSimulatorMethod(TransferMethod):
     def id(self) -> str:
         return "simulate_protanopia"
 
+    requires_reference = False
+
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         **kwargs: Any,
     ) -> np.ndarray:
         from colorcast.processing.simulation import ColorBlindSimulator
@@ -453,10 +497,12 @@ class TritanopiaSimulatorMethod(TransferMethod):
     def id(self) -> str:
         return "simulate_tritanopia"
 
+    requires_reference = False
+
     def transfer(
         self,
         source: np.ndarray,
-        reference: np.ndarray,
+        reference: Optional[np.ndarray],
         **kwargs: Any,
     ) -> np.ndarray:
         from colorcast.processing.simulation import ColorBlindSimulator

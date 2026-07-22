@@ -1,12 +1,21 @@
 """LRU cache for styled images."""
 
 import hashlib
-from typing import Optional, Dict
+from collections import OrderedDict
+from typing import Callable, Optional
 import numpy as np
+
+#: Key component used for methods that do not take a reference (style) image.
+_NO_REFERENCE = "no-reference"
 
 
 class StyleTransferCache:
-    """LRU cache for styled images with method-aware storage."""
+    """LRU cache for styled images with method-aware storage.
+
+    Backed by :class:`collections.OrderedDict`: an entry is moved to the end
+    on every access and the front entry is evicted when the cache is full,
+    so no hand-ordered bookkeeping is needed.
+    """
 
     def __init__(self, max_size: int = 8):
         """
@@ -16,8 +25,7 @@ class StyleTransferCache:
             max_size: Maximum number of styled images to cache
         """
         self.max_size = max_size
-        self.cache: Dict[str, np.ndarray] = {}
-        self.access_order: list = []
+        self.cache: OrderedDict[str, np.ndarray] = OrderedDict()
         self.hits = 0
         self.misses = 0
 
@@ -33,7 +41,8 @@ class StyleTransferCache:
 
         Args:
             content_hash: Hash of content image
-            style_hash: Hash of style image
+            style_hash: Hash of style image, or a marker for reference-free
+                methods
             method: Transfer method ID
             params: Method parameters
 
@@ -55,19 +64,25 @@ class StyleTransferCache:
         """
         return hashlib.md5(img.tobytes()).hexdigest()[:16]
 
+    def _style_hash(self, style: Optional[np.ndarray]) -> str:
+        """Hash the style image, or return the reference-free marker."""
+        if style is None:
+            return _NO_REFERENCE
+        return self._compute_hash(style)
+
     def get(
         self,
         content: np.ndarray,
-        style: np.ndarray,
+        style: Optional[np.ndarray],
         method: str,
-        params: dict = None,
+        params: Optional[dict] = None,
     ) -> Optional[np.ndarray]:
         """
         Retrieve cached styled image.
 
         Args:
             content: Content image array
-            style: Style image array
+            style: Style image array, or None for reference-free methods
             method: Transfer method ID
             params: Method parameters
 
@@ -79,15 +94,13 @@ class StyleTransferCache:
 
         key = self._generate_key(
             self._compute_hash(content),
-            self._compute_hash(style),
+            self._style_hash(style),
             method,
             params,
         )
 
         if key in self.cache:
-            # Update access order (LRU)
-            self.access_order.remove(key)
-            self.access_order.append(key)
+            self.cache.move_to_end(key)
             self.hits += 1
             return self.cache[key]
 
@@ -97,17 +110,17 @@ class StyleTransferCache:
     def set(
         self,
         content: np.ndarray,
-        style: np.ndarray,
+        style: Optional[np.ndarray],
         method: str,
         styled: np.ndarray,
-        params: dict = None,
+        params: Optional[dict] = None,
     ) -> None:
         """
         Cache styled image with LRU eviction.
 
         Args:
             content: Content image array
-            style: Style image array
+            style: Style image array, or None for reference-free methods
             method: Transfer method ID
             styled: Styled image to cache
             params: Method parameters
@@ -115,25 +128,23 @@ class StyleTransferCache:
         if params is None:
             params = {}
 
-        # Evict oldest entry if cache is full
-        if len(self.cache) >= self.max_size:
-            oldest_key = self.access_order.pop(0)
-            del self.cache[oldest_key]
-
         key = self._generate_key(
             self._compute_hash(content),
-            self._compute_hash(style),
+            self._style_hash(style),
             method,
             params,
         )
 
+        if key in self.cache:
+            self.cache.move_to_end(key)
+        elif len(self.cache) >= self.max_size:
+            self.cache.popitem(last=False)
+
         self.cache[key] = styled
-        self.access_order.append(key)
 
     def clear(self) -> None:
         """Clear all cached images."""
         self.cache.clear()
-        self.access_order.clear()
 
     def size(self) -> int:
         """
@@ -164,7 +175,7 @@ class StyleTransferCache:
     def get_or_compute(
         self,
         key: str,
-        compute_func: callable,
+        compute_func: Callable[[], np.ndarray],
     ) -> np.ndarray:
         """
         Get value from cache or compute and cache it.
@@ -177,25 +188,17 @@ class StyleTransferCache:
             Cached or computed value
         """
         if key in self.cache:
-            # Update access order (LRU)
-            self.access_order.remove(key)
-            self.access_order.append(key)
+            self.cache.move_to_end(key)
             self.hits += 1
             return self.cache[key]
-        
-        # Compute value
-        value = compute_func()
+
+        value: np.ndarray = compute_func()
         self.misses += 1
-        
-        # Evict oldest entry if cache is full
+
         if len(self.cache) >= self.max_size:
-            oldest_key = self.access_order.pop(0)
-            del self.cache[oldest_key]
-        
-        # Cache the computed value
+            self.cache.popitem(last=False)
+
         self.cache[key] = value
-        self.access_order.append(key)
-        
         return value
 
 

@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 from typing import List, Callable, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor
-import numpy as np
 from colorcast.processing.image_loader import load_image, save_image
 from colorcast.utils.exceptions import ImageLoadError
 
@@ -36,7 +35,7 @@ class BatchProcessor:
     def process_directory(
         self,
         content_dir: Path,
-        style_image: Path,
+        style_image: Optional[Path],
         output_dir: Path,
         pattern: str = "*.jpg",
     ) -> List[Path]:
@@ -45,7 +44,8 @@ class BatchProcessor:
 
         Args:
             content_dir: Directory with content images
-            style_image: Path to style image
+            style_image: Path to style image, or None for methods that do
+                not require a reference image
             output_dir: Directory for results
             pattern: File pattern to match
 
@@ -56,21 +56,23 @@ class BatchProcessor:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load style image once
-        style = load_image(str(style_image))
+        # Load style image once, if provided
+        style = load_image(str(style_image)) if style_image is not None else None
 
         # Find all content images
         content_files = list(content_dir.glob(pattern))
         total = len(content_files)
 
-        results = []
-        failed_files = []
-
-        def process_single(content_path: Path) -> Optional[Path]:
+        def process_single(
+            content_path: Path,
+        ) -> Tuple[Optional[Path], Optional[Tuple[Path, str]]]:
             """Process single image with error handling.
 
             Returns:
-                Path to output file if successful, None if failed
+                ``(output_path, None)`` on success, or
+                ``(None, (content_path, error_message))`` on failure. Each
+                worker returns its own outcome, so no state shared between
+                threads is mutated here.
             """
             try:
                 content = load_image(str(content_path))
@@ -81,22 +83,24 @@ class BatchProcessor:
 
                 logger.info(f"Successfully processed: {content_path.name}")
 
-                return output_path
+                return output_path, None
             except ImageLoadError as e:
-                error_msg = f"Image load error: {str(e)}"
+                error_msg = f"Image load error: {e!s}"
                 logger.error(f"Failed to process {content_path.name}: {error_msg}")
-                failed_files.append((content_path, error_msg))
-                return None
-            except Exception as e:
-                error_msg = f"Unexpected error: {str(e)}"
+                return None, (content_path, error_msg)
+            except Exception as e:  # noqa: BLE001
+                # Broad on purpose: each worker isolates its own failure so
+                # one bad image cannot abort the rest of the batch.
+                error_msg = f"Unexpected error: {e!s}"
                 logger.error(f"Failed to process {content_path.name}: {error_msg}")
-                failed_files.append((content_path, error_msg))
-                return None
+                return None, (content_path, error_msg)
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # Process all files and filter out None results (failed files)
             all_results = list(executor.map(process_single, content_files))
-            results = [r for r in all_results if r is not None]
+
+        # Merge per-worker outcomes, keeping successes and failures apart
+        results = [path for path, _ in all_results if path is not None]
+        failed_files = [failure for _, failure in all_results if failure is not None]
 
         # Store failed files for reporting
         self.failed_files = failed_files
@@ -153,14 +157,16 @@ class BatchProcessor:
 
                 results.append(output_path)
             except ImageLoadError as e:
-                error_msg = f"Image load error: {str(e)}"
+                error_msg = f"Image load error: {e!s}"
                 logger.error(
                     f"Failed to process pair {i+1} "
                     f"({content_path.name}, {style_path.name}): {error_msg}"
                 )
                 failed_pairs.append(((content_path, style_path), error_msg))
-            except Exception as e:
-                error_msg = f"Unexpected error: {str(e)}"
+            except Exception as e:  # noqa: BLE001
+                # Broad on purpose: each pair is isolated so one bad image
+                # cannot abort the rest of the batch.
+                error_msg = f"Unexpected error: {e!s}"
                 logger.error(
                     f"Failed to process pair {i+1} "
                     f"({content_path.name}, {style_path.name}): {error_msg}"

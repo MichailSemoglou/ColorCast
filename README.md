@@ -2,8 +2,8 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Coverage](https://img.shields.io/badge/coverage-43%25-orange.svg)](tests/)
-[![Tests](https://img.shields.io/badge/tests-162%20passed-brightgreen.svg)](tests/)
+[![Code Coverage](https://img.shields.io/badge/coverage-44%25-orange.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-185%20passed-brightgreen.svg)](tests/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18550038.svg)](https://doi.org/10.5281/zenodo.18550038)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/colorcast?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/colorcast)
 
@@ -18,7 +18,7 @@
 - **Selective Regional Transfer** - Target shadows, midtones, or highlights specifically
 - **Modular Package** - Use as Python API or run GUI/CLI
 - **Performance Optimized** - LRU caching and batch processing support
-- **Tested** - 43% test coverage with 162 passing tests
+- **Tested** - 44% test coverage with 185 passing tests
 - **Documented** - API documentation and examples
 - **Plugin Architecture** - Easy to add custom transfer methods
 
@@ -38,7 +38,7 @@
 
 ![ColorCast Interface](imgs/interface.png)
 
-_ColorCast's intuitive interface showing content image, style image, and result panels_
+_The ColorCast interface: content image, style image, and result panels_
 
 ![ColorCast Daltonize (P) mode](imgs/interface_2.png)
 
@@ -111,9 +111,9 @@ The root `colorcast.py` script is kept as a deprecated compatibility shim and al
 
 **Step-by-step:**
 
-1. **Select Transfer Method**: Choose from 9 different algorithms at the top
+1. **Select Transfer Method**: Choose from 15 methods at the top: 9 transfer algorithms, 3 color-vision-deficiency simulators, and 3 Daltonization corrections
 2. **Load Content Image**: Click to select your base image
-3. **Load Style Image**: Click to select the image whose style you want to copy
+3. **Load Style Image**: Click to select the image whose style you want to copy (not required for simulator and correction modes)
 4. **Apply Style Transfer**: Click to process the images
 5. **Adjust Intensity**: Use the slider to control effect strength (0-100%)
 6. **Save Result**: Export your final image in your preferred format
@@ -131,6 +131,12 @@ With method and intensity:
 
 ```bash
 colorcast transfer content.jpg style.jpg -o output.jpg -m meanstd -i 0.7
+```
+
+Simulate a color-vision deficiency (no style image needed):
+
+```bash
+colorcast transfer content.jpg -m simulate_protanopia -o output.png
 ```
 
 Batch process directory:
@@ -153,7 +159,7 @@ colorcast info --version
 
 **CLI Options:**
 
-- `-m, --method`: Transfer method (histogram, meanstd, lab_reinhard, lut_linear, lut_scurve, lut_contrast, selective_shadows, selective_midtones, selective_highlights)
+- `-m, --method`: Transfer method (histogram, meanstd, lab_reinhard, lut_linear, lut_scurve, lut_contrast, selective_shadows, selective_midtones, selective_highlights, simulate_protanopia, simulate_deuteranopia, simulate_tritanopia)
 - `-i, --intensity`: Blend intensity 0.0-1.0
 - `-w, --workers`: Number of parallel workers (default: 4)
 - `-p, --pattern`: File pattern to match (default: \*.jpg)
@@ -315,7 +321,7 @@ pytest tests/test_transfer_methods.py
 pytest -v
 ```
 
-**Test Coverage:** 43% (162 passing tests, 1 skipped)
+**Test Coverage:** 44% (185 passing tests, 1 skipped)
 
 - Core transfer methods: 99% coverage
 - Full test suite including integration, performance, and property-based tests
@@ -378,7 +384,7 @@ result = source × (1 - mask) + matched × mask
 - **Batch Processing**: Parallel processing with ThreadPoolExecutor
 - **Memory Efficient**: Processes images in-place where possible
 - **Debounced Updates**: 50ms delay prevents UI blocking
-- **Automatic Format Conversion**: Grayscale → RGB, RGBA → RGB
+- **Automatic Format Conversion**: Grayscale → RGB, RGBA → RGB (alpha composited onto a white background)
 
 ## Use Cases
 

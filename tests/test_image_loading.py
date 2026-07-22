@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-from colorcast.processing.image_loader import ensure_rgb, load_image
+from colorcast.processing.image_loader import ensure_rgb, load_image, save_image
 from colorcast.utils.exceptions import InvalidImageFormatError
 
 
@@ -35,12 +35,50 @@ class TestEnsureRgb:
         assert np.all(result == rgb)
 
     def test_ensure_rgb_from_rgba(self):
-        """Test removal of alpha channel."""
-        rgba = np.random.rand(100, 100, 4)
+        """RGBA input is composited onto a white background."""
+        rgba = np.zeros((4, 4, 4), dtype=np.float32)
+        rgba[:, :, 0] = 1.0  # red
+        rgba[:, :, 3] = 1.0  # fully opaque
+
         rgb = ensure_rgb(rgba)
 
-        assert rgb.shape == (100, 100, 3)
-        assert np.all(rgb == rgba[:, :, :3])
+        assert rgb.shape == (4, 4, 3)
+        np.testing.assert_allclose(rgb, rgba[:, :, :3], atol=1e-6)
+
+        rgba[:, :, 3] = 0.0  # fully transparent becomes white
+        rgb = ensure_rgb(rgba)
+        np.testing.assert_allclose(rgb, 1.0, atol=1e-6)
+
+        rgba[:, :, 3] = 0.5  # half transparent blends toward white
+        rgb = ensure_rgb(rgba)
+        np.testing.assert_allclose(rgb[:, :, 0], 1.0, atol=1e-6)
+        np.testing.assert_allclose(rgb[:, :, 1], 0.5, atol=1e-6)
+
+    def test_ensure_rgb_from_rgba_uint8(self):
+        """Compositing preserves the input dtype for integer images."""
+        rgba = np.zeros((2, 2, 4), dtype=np.uint8)
+        rgba[:, :, 0] = 200
+        rgba[:, :, 3] = 255  # fully opaque
+
+        rgb = ensure_rgb(rgba)
+
+        assert rgb.dtype == np.uint8
+        np.testing.assert_array_equal(rgb, rgba[:, :, :3])
+
+    @pytest.mark.parametrize("dtype", [np.int16, np.int32])
+    def test_ensure_rgb_rgba_signed_integer_raises(self, dtype):
+        """Signed integer RGBA input is rejected."""
+        img = np.zeros((2, 2, 4), dtype=dtype)
+
+        with pytest.raises(InvalidImageFormatError, match="Signed integer"):
+            ensure_rgb(img)
+
+    def test_ensure_rgb_rgba_uint64_raises(self):
+        """64-bit integer RGBA input is rejected (float64 cannot hold it)."""
+        img = np.zeros((2, 2, 4), dtype=np.uint64)
+
+        with pytest.raises(InvalidImageFormatError, match="not supported"):
+            ensure_rgb(img)
 
     def test_ensure_rgb_invalid_channels_2d(self):
         """Test that 2D image is converted."""
@@ -122,3 +160,33 @@ class TestLoadImage:
         loaded = load_image(str(img_path), max_pixels=50000)
 
         assert loaded.shape[0] * loaded.shape[1] <= 50000
+
+
+class TestSaveImage:
+    """Tests for save_image dtype validation."""
+
+    def test_save_float32(self, tmp_path):
+        """Float32 arrays are scaled to uint8 on save."""
+        img = np.random.rand(10, 10, 3).astype(np.float32)
+        out = tmp_path / "out.png"
+
+        save_image(img, str(out))
+
+        assert out.exists()
+
+    def test_save_uint8(self, tmp_path):
+        """Uint8 arrays are saved as-is."""
+        img = (np.random.rand(10, 10, 3) * 255).astype(np.uint8)
+        out = tmp_path / "out.png"
+
+        save_image(img, str(out))
+
+        assert out.exists()
+
+    @pytest.mark.parametrize("dtype", [np.int16, np.float16, np.uint16, bool])
+    def test_save_unsupported_dtype_raises(self, tmp_path, dtype):
+        """Unsupported dtypes raise instead of writing a corrupt file."""
+        img = np.zeros((10, 10, 3), dtype=dtype)
+
+        with pytest.raises(InvalidImageFormatError, match="Unsupported dtype"):
+            save_image(img, str(tmp_path / "out.png"))

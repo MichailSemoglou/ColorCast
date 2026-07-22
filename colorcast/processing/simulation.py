@@ -10,6 +10,8 @@ Public API
   dichromatic deficiencies.
 - :data:`DeficiencyType` — ``Literal["protanopia", "deuteranopia",
   "tritanopia"]``.
+- :data:`SUPPORTED_DEFICIENCIES`: runtime tuple of the supported deficiency
+  names, derived from :data:`DeficiencyType`.
 - ``simulate_protanopia``, ``simulate_deuteranopia``,
   ``simulate_tritanopia`` — convenience wrappers on
   :meth:`ColorBlindSimulator.transform_color_space`.
@@ -48,13 +50,20 @@ References
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Callable, ClassVar, Literal, get_args
 
 import numpy as np
 from colorcast.processing.image_loader import normalize_to_float32
 
-# Type alias used in public method signatures.
+# Type alias used in public method signatures. This Literal is the single
+# source of truth for the supported deficiencies; Python 3.10 cannot unpack a
+# tuple into Literal[...], so the alias comes first and the runtime tuple is
+# derived from it.
 DeficiencyType = Literal["protanopia", "deuteranopia", "tritanopia"]
+
+# Deficiency names accepted at runtime, derived from DeficiencyType so that
+# validation and static typing cannot drift apart.
+SUPPORTED_DEFICIENCIES: tuple[str, ...] = get_args(DeficiencyType)
 
 
 def _srgb_to_linear(rgb: np.ndarray) -> np.ndarray:
@@ -84,6 +93,21 @@ def _linear_to_srgb(linear: np.ndarray) -> np.ndarray:
     )
 
 
+def _tritan_projection(linear_pixels: np.ndarray) -> np.ndarray:
+    """Project (N, 3) linear-RGB pixels for tritanopia (Brettel 1997).
+
+    Tritanopia cannot be approximated well by a single matrix; each pixel is
+    projected onto one of two half-planes depending on which side of the
+    separation plane it falls. Both projections are computed and merged with
+    ``np.where`` at negligible extra cost. Uses the plane matrices defined
+    on :class:`ColorBlindSimulator`.
+    """
+    plane1: np.ndarray = linear_pixels @ ColorBlindSimulator._TRITAN_PLANE1_RGB.T
+    plane2: np.ndarray = linear_pixels @ ColorBlindSimulator._TRITAN_PLANE2_RGB.T
+    on_plane1 = (linear_pixels @ ColorBlindSimulator._TRITAN_SEPARATION_RGB) >= 0
+    return np.where(on_plane1[:, np.newaxis], plane1, plane2)
+
+
 class ColorBlindSimulator:
     """Simulate the three main dichromatic colour-vision deficiencies.
 
@@ -97,15 +121,9 @@ class ColorBlindSimulator:
         error_map = original - simulated   # signed difference, shape (H,W,3)
     """
 
-    # ------------------------------------------------------------------ #
-    # Viénot 1999 single-matrix linear RGB transformations.             #
-    #                                                                    #
-    # These are the combined RGB → LMS → projection → LMS → RGB matrices #
-    # dumped from DaltonLens-Python (linearRGB colour interpolation).    #
-    # Each row sums to 1, preserving achromatic whites and grays.        #
-    # ------------------------------------------------------------------ #
-
-    # Protanopia — L cone absent ("red-blind")
+    # L cone absent ("red-blind"). Single-matrix model of Viénot, Brettel &
+    # Mollon (1999), combined linear-RGB form published by DaltonLens (2021).
+    # Rows sum to 1, so achromatic whites and grays are preserved.
     _PROTAN_RGB: np.ndarray = np.array(
         [
             [0.10889, 0.89111, -0.00000],
@@ -115,7 +133,9 @@ class ColorBlindSimulator:
         dtype=np.float64,
     )
 
-    # Deuteranopia — M cone absent ("green-blind")
+    # M cone absent ("green-blind"). Single-matrix model of Viénot, Brettel &
+    # Mollon (1999), combined linear-RGB form published by DaltonLens (2021).
+    # Rows sum to 1, so achromatic whites and grays are preserved.
     _DEUTAN_RGB: np.ndarray = np.array(
         [
             [0.29031, 0.70969, -0.00000],
@@ -125,16 +145,9 @@ class ColorBlindSimulator:
         dtype=np.float64,
     )
 
-    # ------------------------------------------------------------------ #
-    # Brettel 1997 two-half-plane tritanopia transformation.            #
-    #                                                                    #
-    # Tritanopia cannot be approximated well by a single matrix; the     #
-    # accurate model projects onto one of two planes depending on which  #
-    # side of the neutral diagonal the colour falls.  The matrices and   #
-    # separation-plane normal below are the pre-computed linear RGB      #
-    # forms published by DaltonLens.                                     #
-    # ------------------------------------------------------------------ #
-
+    # S cone absent ("blue-blind"), first half-plane. Two-plane model of
+    # Brettel, Viénot & Mollon (1997), combined linear-RGB form published by
+    # DaltonLens (2021).
     _TRITAN_PLANE1_RGB: np.ndarray = np.array(
         [
             [1.01354, 0.14268, -0.15622],
@@ -144,6 +157,9 @@ class ColorBlindSimulator:
         dtype=np.float64,
     )
 
+    # S cone absent ("blue-blind"), second half-plane. Two-plane model of
+    # Brettel, Viénot & Mollon (1997), combined linear-RGB form published by
+    # DaltonLens (2021).
     _TRITAN_PLANE2_RGB: np.ndarray = np.array(
         [
             [0.93337, 0.19999, -0.13336],
@@ -153,18 +169,23 @@ class ColorBlindSimulator:
         dtype=np.float64,
     )
 
-    # Separation-plane normal in linear RGB.  A pixel selects Plane 1 when
+    # Separation-plane normal in linear RGB. A pixel selects Plane 1 when
     # dot(rgb, _TRITAN_SEPARATION_RGB) >= 0 and Plane 2 otherwise.
     _TRITAN_SEPARATION_RGB: np.ndarray = np.array(
         [7.92482, -5.66475, -2.26007],
         dtype=np.float64,
     )
 
-    # Lookup table — maps deficiency name → its linear RGB matrix.
-    # Tritanopia is handled separately because it needs two planes.
-    _PROJECTION: dict[str, np.ndarray] = {
+    # Strategy registry: maps each name in SUPPORTED_DEFICIENCIES to either a
+    # single linear-RGB projection matrix or a callable that transforms an
+    # (N, 3) linear-RGB array. A new deficiency needs one entry here plus its
+    # name in DeficiencyType.
+    _PROJECTION: ClassVar[
+        dict[str, np.ndarray | Callable[[np.ndarray], np.ndarray]]
+    ] = {
         "protanopia": _PROTAN_RGB,
         "deuteranopia": _DEUTAN_RGB,
+        "tritanopia": _tritan_projection,
     }
 
     def transform_color_space(
@@ -178,13 +199,14 @@ class ColorBlindSimulator:
         simulations.  Internally it:
 
         1. Converts the input to a **float32** array normalized to [0, 1].
-        2. Flattens (H, W, 3) → (N, 3) for fully vectorized batch ops.
-        3. Gamma-decodes nonlinear sRGB → linear RGB.
-        4. Applies the appropriate linear RGB transformation:
+        2. Validates the (H, W, 3) shape, raising ``ValueError`` otherwise.
+        3. Flattens (H, W, 3) → (N, 3) for fully vectorized batch ops.
+        4. Gamma-decodes nonlinear sRGB → linear RGB.
+        5. Applies the appropriate linear RGB transformation:
            Viénot 1999 for protanopia/deuteranopia, Brettel 1997 two-plane
            for tritanopia.
-        5. Gamma-encodes linear RGB → nonlinear sRGB and clips to [0, 1].
-        6. Returns the result as a **float32** (H, W, 3) array.
+        6. Gamma-encodes linear RGB → nonlinear sRGB and clips to [0, 1].
+        7. Returns the result as a **float32** (H, W, 3) array.
 
         Returning float32 (not saving to disk) is intentional: the caller
         can directly compute a signed error / difference map::
@@ -200,51 +222,34 @@ class ColorBlindSimulator:
             Simulated image as float32 in [0, 1], shape (H, W, 3).
 
         Raises:
-            ValueError: If *deficiency_type* is not recognised.
+            ValueError: If *deficiency_type* is not one of
+                :data:`SUPPORTED_DEFICIENCIES`.
+            ValueError: If *image_array* is not an (H, W, 3) RGB image.
         """
-        valid_types = ["protanopia", "deuteranopia", "tritanopia"]
-        if deficiency_type not in valid_types:
+        if deficiency_type not in SUPPORTED_DEFICIENCIES:
             raise ValueError(
                 f"Unknown deficiency type: {deficiency_type!r}. "
-                f"Choose from {valid_types}."
+                f"Choose from {list(SUPPORTED_DEFICIENCIES)}."
             )
 
-        # Step 1: convert to float32, normalize to [0, 1] --------------------
         img = normalize_to_float32(image_array)
+        if img.ndim != 3 or img.shape[-1] != 3:
+            raise ValueError(
+                "Expected an (H, W, 3) RGB image; "
+                f"got an array with shape {img.shape}."
+            )
 
         h, w, _ = img.shape
-
-        # Step 2: flatten to (N, 3) for vectorized matrix operations ----------
         pixels = img.reshape(-1, 3).astype(np.float64)  # upcast for precision
-
-        # Step 3: gamma-decode nonlinear sRGB → linear RGB --------------------
         linear_pixels = _srgb_to_linear(pixels)
 
-        # Step 4: apply the deficiency-specific linear RGB transformation -----
-        if deficiency_type == "tritanopia":
-            # Brettel 1997: choose one of two projection planes per pixel.
-            # The separation plane is evaluated in linear RGB; the matrices
-            # already include the RGB → LMS → projection → LMS → RGB chain.
-            dot = linear_pixels @ self._TRITAN_SEPARATION_RGB  # (N,)
-            plane1_mask = dot >= 0
-
-            rgb_linear_sim = np.empty_like(linear_pixels)
-            if np.any(plane1_mask):
-                rgb_linear_sim[plane1_mask] = (
-                    linear_pixels[plane1_mask] @ self._TRITAN_PLANE1_RGB.T
-                )
-            if np.any(~plane1_mask):
-                rgb_linear_sim[~plane1_mask] = (
-                    linear_pixels[~plane1_mask] @ self._TRITAN_PLANE2_RGB.T
-                )
+        strategy = self._PROJECTION[deficiency_type]
+        if callable(strategy):
+            rgb_linear_sim = strategy(linear_pixels)
         else:
-            projection = self._PROJECTION[deficiency_type]
-            rgb_linear_sim = linear_pixels @ projection.T  # (N, 3)
+            rgb_linear_sim = linear_pixels @ strategy.T
 
-        # Step 5: gamma-encode linear RGB → nonlinear sRGB --------------------
         rgb_sim = _linear_to_srgb(rgb_linear_sim)
-
-        # Step 6: clip, reshape, and downcast back to float32 -----------------
         rgb_sim = np.clip(rgb_sim, 0.0, 1.0).astype(np.float32)
         return rgb_sim.reshape(h, w, 3)
 

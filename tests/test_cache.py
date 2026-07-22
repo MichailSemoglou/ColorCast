@@ -112,3 +112,37 @@ class TestStyleTransferCache:
 
         np.testing.assert_array_equal(result1, styled1)
         np.testing.assert_array_equal(result2, styled2)
+
+    def test_cache_lru_eviction_order(self):
+        """Recently accessed entries survive eviction."""
+        cache = StyleTransferCache(max_size=2)
+
+        style = np.zeros((4, 4, 3), dtype=np.float32)
+        c1 = np.full((4, 4, 3), 0.1, dtype=np.float32)
+        c2 = np.full((4, 4, 3), 0.2, dtype=np.float32)
+        c3 = np.full((4, 4, 3), 0.3, dtype=np.float32)
+
+        cache.set(c1, style, "histogram", c1)
+        cache.set(c2, style, "histogram", c2)
+        cache.get(c1, style, "histogram")  # c1 is now most recently used
+        cache.set(c3, style, "histogram", c3)  # evicts c2, not c1
+
+        assert cache.get(c1, style, "histogram") is not None
+        assert cache.get(c2, style, "histogram") is None
+        assert cache.get(c3, style, "histogram") is not None
+
+    def test_cache_reference_free_method(self):
+        """A None style produces a style-independent cache key."""
+        cache = StyleTransferCache(max_size=5)
+
+        content = np.random.rand(50, 50, 3)
+        styled = np.random.rand(50, 50, 3)
+
+        cache.set(content, None, "simulate_protanopia", styled)
+        result = cache.get(content, None, "simulate_protanopia")
+
+        np.testing.assert_array_equal(result, styled)
+
+        # A style-keyed entry for the same content is a different key
+        style = np.random.rand(50, 50, 3)
+        assert cache.get(content, style, "simulate_protanopia") is None

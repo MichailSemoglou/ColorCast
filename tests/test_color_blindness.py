@@ -1,12 +1,18 @@
 """Tests for color-blindness simulation, error maps, and Daltonization."""
 
+from typing import get_args
+
 import numpy as np
 import pytest
 from skimage import color as skcolor
 
 from colorcast.analysis.daltonization import apply_daltonization, daltonize
 from colorcast.analysis.error_map import ErrorMap, get_error_map, summarize_error_map
-from colorcast.processing.simulation import ColorBlindSimulator
+from colorcast.processing.simulation import (
+    SUPPORTED_DEFICIENCIES,
+    ColorBlindSimulator,
+    DeficiencyType,
+)
 
 
 class TestColorBlindSimulator:
@@ -45,6 +51,22 @@ class TestColorBlindSimulator:
     def test_unknown_deficiency_raises(self, simulator, rgb_image):
         with pytest.raises(ValueError, match="Unknown deficiency type"):
             simulator.transform_color_space(rgb_image, "achromatopsia")
+
+    @pytest.mark.parametrize(
+        "bad_shape",
+        [(16, 16), (16, 16, 1), (16, 16, 4)],
+        ids=["grayscale-2d", "single-channel", "rgba"],
+    )
+    def test_non_rgb_shape_raises(self, simulator, bad_shape):
+        image = np.random.rand(*bad_shape).astype(np.float32)
+
+        with pytest.raises(ValueError, match="RGB"):
+            simulator.transform_color_space(image, "deuteranopia")
+
+    def test_supported_deficiencies_single_source(self):
+        """The alias, the runtime tuple, and the projection registry stay in sync."""
+        assert set(SUPPORTED_DEFICIENCIES) == set(get_args(DeficiencyType))
+        assert set(SUPPORTED_DEFICIENCIES) == set(ColorBlindSimulator._PROJECTION)
 
     def test_uniform_gray_is_handled(self, simulator):
         gray = np.full((16, 16, 3), 0.5, dtype=np.float32)

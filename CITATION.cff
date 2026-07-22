@@ -2,14 +2,15 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
 title: "ColorCast: Color Transfer Toolkit for Python"
-version: 2.1.1
-date-released: 2026-07-14
+version: 2.2.0
+date-released: 2026-07-22
 abstract: "ColorCast is a Python toolkit for color and style transfer between images. It provides multiple algorithms including histogram matching, mean/std transfer, LUT-based curves, selective regional transfer, and GPU acceleration. The toolkit supports both GUI and CLI interfaces with caching and batch processing capabilities."
 authors:
   - family-names: Semoglou
     given-names: Michail
     email: m.semoglou@tongji.edu.cn
     affiliation: "College of Design and Innovation, Tongji University"
+    orcid: "https://orcid.org/0009-0003-3268-5657"
 license: MIT
 repository-code: "https://github.com/MichailSemoglou/ColorCast"
 url: "https://github.com/MichailSemoglou/ColorCast"
