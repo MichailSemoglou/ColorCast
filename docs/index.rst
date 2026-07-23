@@ -1,7 +1,7 @@
 ColorCast Documentation
 =====================
 
-.. image:: https://img.shields.io/badge/version-2.2.0-blue.svg
+.. image:: https://img.shields.io/badge/version-2.3.0-blue.svg
    :target: https://github.com/MichailSemoglou/ColorCast
    :alt: Version
 

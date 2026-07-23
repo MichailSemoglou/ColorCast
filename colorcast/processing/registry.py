@@ -26,9 +26,15 @@ class TransferMethod(ABC):
         return {}
 
     #: Whether the method needs a reference (style) image. Methods that
-    #: transform the source image alone, such as the CVD simulators, set
-    #: this to False; callers may then pass ``reference=None``.
+    #: transform the source image alone, such as the CVD simulators and
+    #: Daltonizers, set this to False; callers may then pass
+    #: ``reference=None``.
     requires_reference: bool = True
+
+    #: Label for the GUI intensity slider. Transfer methods blend source
+    #: and styled image; simulators treat the slider as severity and
+    #: Daltonizers as correction strength.
+    slider_label: str = "Style Intensity:"
 
     def _require_reference(self, reference: Optional[np.ndarray]) -> np.ndarray:
         """Validate that a reference image was provided.
@@ -448,6 +454,7 @@ class DeuteranopiaSimulatorMethod(TransferMethod):
         return "simulate_deuteranopia"
 
     requires_reference = False
+    slider_label = "Severity (0%=normal, 100%=full):"
 
     def transfer(
         self,
@@ -473,6 +480,7 @@ class ProtanopiaSimulatorMethod(TransferMethod):
         return "simulate_protanopia"
 
     requires_reference = False
+    slider_label = "Severity (0%=normal, 100%=full):"
 
     def transfer(
         self,
@@ -498,6 +506,7 @@ class TritanopiaSimulatorMethod(TransferMethod):
         return "simulate_tritanopia"
 
     requires_reference = False
+    slider_label = "Severity (0%=normal, 100%=full):"
 
     def transfer(
         self,
@@ -508,3 +517,90 @@ class TritanopiaSimulatorMethod(TransferMethod):
         from colorcast.processing.simulation import ColorBlindSimulator
 
         return ColorBlindSimulator().simulate_tritanopia(source)
+
+
+@registry.register
+class DaltonizeProtanopiaMethod(TransferMethod):
+    """Daltonization correction for protanopia (red-cone absent).
+
+    Like the simulators, this method ignores the reference image and
+    transforms the source image alone.  The full correction is computed
+    at ``intensity=1.0``; the GUI blends original and corrected images
+    through its intensity slider.
+    """
+
+    @property
+    def name(self) -> str:
+        return "Daltonize: Protanopia"
+
+    @property
+    def id(self) -> str:
+        return "daltonize_protanopia"
+
+    requires_reference = False
+    slider_label = "Correction Intensity (0%=original, 100%=fully corrected):"
+
+    def transfer(
+        self,
+        source: np.ndarray,
+        reference: Optional[np.ndarray],
+        intensity: float = 1.0,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        from colorcast.analysis.daltonization import daltonize
+
+        return daltonize(source, "protanopia", intensity=intensity)
+
+
+@registry.register
+class DaltonizeDeuteranopiaMethod(TransferMethod):
+    """Daltonization correction for deuteranopia (green-cone absent)."""
+
+    @property
+    def name(self) -> str:
+        return "Daltonize: Deuteranopia"
+
+    @property
+    def id(self) -> str:
+        return "daltonize_deuteranopia"
+
+    requires_reference = False
+    slider_label = "Correction Intensity (0%=original, 100%=fully corrected):"
+
+    def transfer(
+        self,
+        source: np.ndarray,
+        reference: Optional[np.ndarray],
+        intensity: float = 1.0,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        from colorcast.analysis.daltonization import daltonize
+
+        return daltonize(source, "deuteranopia", intensity=intensity)
+
+
+@registry.register
+class DaltonizeTritanopiaMethod(TransferMethod):
+    """Daltonization correction for tritanopia (blue-cone absent)."""
+
+    @property
+    def name(self) -> str:
+        return "Daltonize: Tritanopia"
+
+    @property
+    def id(self) -> str:
+        return "daltonize_tritanopia"
+
+    requires_reference = False
+    slider_label = "Correction Intensity (0%=original, 100%=fully corrected):"
+
+    def transfer(
+        self,
+        source: np.ndarray,
+        reference: Optional[np.ndarray],
+        intensity: float = 1.0,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        from colorcast.analysis.daltonization import daltonize
+
+        return daltonize(source, "tritanopia", intensity=intensity)

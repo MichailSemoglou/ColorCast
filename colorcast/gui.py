@@ -22,19 +22,9 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from colorcast import (
-    blend_images,
-    color_transfer_lab,
-    color_transfer_meanstd,
-    lut_transfer_with_curve,
-    match_histograms_multichannel,
-    save_image,
-    selective_color_transfer,
-)
-from colorcast.analysis.daltonization import daltonize as daltonize_image
+from colorcast import blend_images, registry, save_image
 from colorcast.processing.image_loader import ImageMeta, load_image_with_meta
 from colorcast.utils.exceptions import ImageProcessingError
-from colorcast.processing.simulation import ColorBlindSimulator
 
 logger = logging.getLogger(__name__)
 
@@ -334,29 +324,15 @@ class StyleTransferApp(QWidget):
             # Header row clicked — ignore
             return
         self.transfer_method = data
-        # Rename the slider label depending on mode
-        _simulators = {
-            "simulate_deuteranopia",
-            "simulate_protanopia",
-            "simulate_tritanopia",
-        }
-        _daltonizers = {
-            "daltonize_deuteranopia",
-            "daltonize_protanopia",
-            "daltonize_tritanopia",
-        }
-        if self.transfer_method in _simulators:
-            self.intensity_heading_label.setText("Severity (0%=normal, 100%=full):")
-        elif self.transfer_method in _daltonizers:
-            self.intensity_heading_label.setText(
-                "Correction Intensity (0%=original, 100%=fully corrected):"
-            )
-        else:
-            self.intensity_heading_label.setText("Style Intensity:")
+        method = registry.get_method(self.transfer_method)
 
-        # Update style-image controls: simulators and daltonizers do not use a
-        # style image, so the load button is disabled and a note is shown.
-        style_needed = self.transfer_method not in _simulators and self.transfer_method not in _daltonizers
+        # The slider label comes from method metadata: it reads as
+        # intensity, severity, or correction strength depending on the method.
+        self.intensity_heading_label.setText(method.slider_label)
+
+        # Methods with requires_reference=False do not use a style image,
+        # so the load button is disabled and a note is shown.
+        style_needed = method.requires_reference
         self.load_style_button.setEnabled(style_needed)
         if style_needed:
             self.load_style_button.setToolTip("")
@@ -369,87 +345,25 @@ class StyleTransferApp(QWidget):
             if self.style_image is None:
                 self.style_label.setText("Not needed for this mode")
 
-        # Simulators and Daltonizers only need the content image; others need both
-        if self.transfer_method in _simulators or self.transfer_method in _daltonizers:
-            if self.content_image is not None:
-                self.apply_style_transfer()
-        elif self.content_image is not None and self.style_image is not None:
+        # Reference-free methods only need the content image; others need both.
+        if self.content_image is not None and (
+            not method.requires_reference or self.style_image is not None
+        ):
             self.apply_style_transfer()
 
     def apply_style_transfer(self) -> None:
         """Apply selected style transfer method to images."""
-        _simulators = {
-            "simulate_deuteranopia",
-            "simulate_protanopia",
-            "simulate_tritanopia",
-        }
-        _daltonizers = {
-            "daltonize_deuteranopia": "deuteranopia",
-            "daltonize_protanopia": "protanopia",
-            "daltonize_tritanopia": "tritanopia",
-        }
-        is_simulator = self.transfer_method in _simulators
-        is_daltonizer = self.transfer_method in _daltonizers
+        method = registry.get_method(self.transfer_method)
         has_content = self.content_image is not None
         has_style = self.style_image is not None
 
-        if has_content and (has_style or is_simulator or is_daltonizer):
+        if has_content and (has_style or not method.requires_reference):
             try:
-                if is_simulator:
-                    self.styled_image = ColorBlindSimulator().transform_color_space(
-                        self.content_image,
-                        self.transfer_method.replace("simulate_", ""),
-                    )
-                elif is_daltonizer:
-                    # Phase 3: full pipeline (simulate -> error map -> correct).
-                    # Intensity=1.0 here; the slider blends original <-> fully
-                    # corrected via apply_intensity_blend / blend_images.
-                    self.styled_image = daltonize_image(
-                        self.content_image,
-                        _daltonizers[self.transfer_method],
-                        intensity=1.0,
-                    )
-                elif self.transfer_method == "histogram":
-                    self.styled_image = match_histograms_multichannel(
-                        self.content_image, self.style_image
-                    )
-                elif self.transfer_method == "meanstd":
-                    self.styled_image = color_transfer_meanstd(
-                        self.content_image, self.style_image
-                    )
-                elif self.transfer_method == "lab_reinhard":
-                    self.styled_image = color_transfer_lab(
-                        self.content_image, self.style_image
-                    )
-                elif self.transfer_method == "lut_linear":
-                    self.styled_image = lut_transfer_with_curve(
-                        self.content_image, self.style_image, "linear"
-                    )
-                elif self.transfer_method == "lut_scurve":
-                    self.styled_image = lut_transfer_with_curve(
-                        self.content_image, self.style_image, "s-curve"
-                    )
-                elif self.transfer_method == "lut_contrast":
-                    self.styled_image = lut_transfer_with_curve(
-                        self.content_image, self.style_image, "contrast"
-                    )
-                elif self.transfer_method == "selective_shadows":
-                    self.styled_image = selective_color_transfer(
-                        self.content_image, self.style_image, "shadows"
-                    )
-                elif self.transfer_method == "selective_midtones":
-                    self.styled_image = selective_color_transfer(
-                        self.content_image, self.style_image, "midtones"
-                    )
-                elif self.transfer_method == "selective_highlights":
-                    self.styled_image = selective_color_transfer(
-                        self.content_image, self.style_image, "highlights"
-                    )
-                else:
-                    self.styled_image = match_histograms_multichannel(
-                        self.content_image, self.style_image
-                    )
-
+                # For simulators and Daltonizers the style image is unused,
+                # so style_image may be None here.
+                self.styled_image = method.transfer(
+                    self.content_image, self.style_image
+                )
                 self.result_image = blend_images(
                     self.content_image, self.styled_image, self.intensity
                 )
@@ -460,7 +374,7 @@ class StyleTransferApp(QWidget):
                 )
                 logger.error(f"Style transfer failed: {e}")
         else:
-            if is_simulator or is_daltonizer:
+            if not method.requires_reference:
                 msg = "Please load a content image before applying."
             elif not has_content and not has_style:
                 msg = (

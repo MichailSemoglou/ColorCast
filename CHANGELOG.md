@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.3.0] – 2026-07-23
+
+### Added
+
+- Three Daltonizer methods (`daltonize_protanopia`, `daltonize_deuteranopia`, `daltonize_tritanopia`) registered in `colorcast/processing/registry.py`, wrapping `colorcast.analysis.daltonization.daltonize`. All 15 GUI modes are now registered, and the Daltonizers are selectable through the CLI and API as well as the GUI.
+- `TransferMethod.slider_label` declares the GUI intensity-slider label for each method. Simulator and Daltonizer methods override the default.
+
+### Changed
+
+- The GUI dispatches every method through `registry.get_method()`; the 14-branch `if`-`elif` chain in `apply_style_transfer` and the method-id prefix checks in `on_method_changed` were removed.
+- The GUI slider label and style-image controls derive from method metadata (`requires_reference`, `slider_label`) instead of hardcoded category sets.
+
+v2.3.0 · released July 2026 · MIT
+
 ## [2.2.0] – 2026-07-22
 
 ### Added

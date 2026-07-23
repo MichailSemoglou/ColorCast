@@ -159,7 +159,7 @@ colorcast info --version
 
 **CLI Options:**
 
-- `-m, --method`: Transfer method (histogram, meanstd, lab_reinhard, lut_linear, lut_scurve, lut_contrast, selective_shadows, selective_midtones, selective_highlights, simulate_protanopia, simulate_deuteranopia, simulate_tritanopia)
+- `-m, --method`: Transfer method (histogram, meanstd, lab_reinhard, lut_linear, lut_scurve, lut_contrast, selective_shadows, selective_midtones, selective_highlights, simulate_protanopia, simulate_deuteranopia, simulate_tritanopia, daltonize_protanopia, daltonize_deuteranopia, daltonize_tritanopia)
 - `-i, --intensity`: Blend intensity 0.0-1.0
 - `-w, --workers`: Number of parallel workers (default: 4)
 - `-p, --pattern`: File pattern to match (default: \*.jpg)
