@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import NamedTuple, Optional, Tuple
 import numpy as np
 from skimage import io, img_as_float, transform
-from colorcast.utils.validators import (
-    validate_file_path,
-    validate_image_size,
+from colorcast.utils.validators_enhanced import (
+    validate_image_file,
+    validate_image_array,
     ALLOWED_IMAGE_EXTENSIONS,
 )
 from colorcast.utils.exceptions import ImageLoadError, InvalidImageFormatError
@@ -99,20 +99,33 @@ def normalize_to_float32(array: np.ndarray) -> np.ndarray:
     Signed integer dtypes are not supported and raise ``TypeError``.
 
     Args:
-        array: Input image as an unsigned integer or float NumPy array.
+        array: Input image as an unsigned integer or float NumPy array with
+            shape ``(H, W, 3)``.
 
     Returns:
-        float32 array with values clipped to [0, 1].
+        float32 array of shape ``(H, W, 3)`` with values clipped to [0, 1].
 
     Raises:
         TypeError: If ``array`` has a signed integer dtype.
+        ValueError: If ``array`` does not have shape ``(H, W, 3)``.
 
     Example:
         >>> import numpy as np
-        >>> normalize_to_float32(np.array([0, 128, 255], dtype=np.uint8))
-        array([0.       , 0.5019608, 1.       ], dtype=float32)
+        >>> img = np.full((4, 4, 3), 128, dtype=np.uint8)
+        >>> out = normalize_to_float32(img)
+        >>> out.shape
+        (4, 4, 3)
+        >>> out.dtype
+        dtype('float32')
+        >>> np.allclose(out, 128/255, atol=0.01)
+        True
     """
     arr = np.asarray(array)
+    if arr.ndim != 3 or arr.shape[-1] != 3:
+        raise ValueError(
+            f"Expected image with shape (H, W, 3), got {arr.shape}. "
+            "Convert grayscale or multi-channel images with ensure_rgb() first."
+        )
     if np.issubdtype(arr.dtype, np.signedinteger):
         raise TypeError(
             f"Signed integer dtype '{arr.dtype}' is not supported. "
@@ -148,7 +161,7 @@ def load_image_with_meta(
         ImageLoadError: If image fails to load
         ValidationError: If image size exceeds limits
     """
-    validate_file_path(path, ALLOWED_IMAGE_EXTENSIONS)
+    validate_image_file(path, ALLOWED_IMAGE_EXTENSIONS)
 
     try:
         img = img_as_float(io.imread(path))
@@ -173,7 +186,7 @@ def load_image_with_meta(
                 img, (new_h, new_w), anti_aliasing=True, preserve_range=True
             )
 
-    validate_image_size(img, max_pixels)
+    validate_image_array(img, max_pixels=max_pixels)
     return img, meta
 
 

@@ -4,8 +4,8 @@ This package provides tools for:
 - Comparing different transfer methods using quantitative metrics
 - Visualizing transfer results
 - Experiment tracking for academic research
-- Phase 2: Error map / difference analysis for colour-blindness simulation
-- Phase 3: Daltonization — re-encoding lost chromatic information
+- Error map / difference analysis for colour-blindness simulation
+- Daltonization — re-encoding lost chromatic information
 """
 
 from colorcast.analysis.comparison import MethodComparison

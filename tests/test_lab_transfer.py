@@ -18,7 +18,7 @@ class TestLabColorTransfer:
 
         # Check output shape
         assert result.shape == source.shape
-        assert result.dtype == source.dtype
+        assert result.dtype == np.float32
 
         # Check values are in valid range [0, 1]
         assert np.all(result >= 0)
@@ -39,7 +39,7 @@ class TestLabColorTransfer:
         result_none = color_transfer_lab(source, reference, alpha=0.0)
 
         # No transfer should return original image
-        np.testing.assert_array_almost_equal(result_none, source, decimal=10)
+        np.testing.assert_array_almost_equal(result_none, source, decimal=5)
 
         # Half transfer should be between source and full transfer
         # (approximately, due to nonlinear Lab space)
@@ -53,7 +53,7 @@ class TestLabColorTransfer:
 
         # Alpha < 0 should be treated as 0
         result_neg = color_transfer_lab(source, reference, alpha=-0.5)
-        np.testing.assert_array_almost_equal(result_neg, source, decimal=10)
+        np.testing.assert_array_almost_equal(result_neg, source, decimal=5)
 
         # Alpha > 1 should be treated as 1
         result_over = color_transfer_lab(source, reference, alpha=1.5)

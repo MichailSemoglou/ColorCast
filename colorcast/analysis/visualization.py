@@ -10,9 +10,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
-# Set backend to non-interactive for headless environments
-matplotlib.use('Agg')
-
 
 def visualize_transfer_result(
     source: np.ndarray,

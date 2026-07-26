@@ -2,8 +2,8 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Coverage](https://img.shields.io/badge/coverage-44%25-orange.svg)](tests/)
-[![Tests](https://img.shields.io/badge/tests-185%20passed-brightgreen.svg)](tests/)
+[![Code Coverage](https://img.shields.io/badge/coverage-51%25-orange.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-196%20passed-brightgreen.svg)](tests/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18550038.svg)](https://doi.org/10.5281/zenodo.18550038)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/colorcast?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/colorcast)
 
@@ -18,7 +18,7 @@
 - **Selective Regional Transfer** - Target shadows, midtones, or highlights specifically
 - **Modular Package** - Use as Python API or run GUI/CLI
 - **Performance Optimized** - LRU caching and batch processing support
-- **Tested** - 44% test coverage with 185 passing tests
+- **Tested** - 51% test coverage with 196 passing tests
 - **Documented** - API documentation and examples
 - **Plugin Architecture** - Easy to add custom transfer methods
 
@@ -321,7 +321,7 @@ pytest tests/test_transfer_methods.py
 pytest -v
 ```
 
-**Test Coverage:** 44% (185 passing tests, 1 skipped)
+**Test Coverage:** 51% (196 passing tests, 1 skipped)
 
 - Core transfer methods: 99% coverage
 - Full test suite including integration, performance, and property-based tests

@@ -25,12 +25,34 @@ from pathlib import Path
 from typing import Tuple, Optional
 import numpy as np
 from colorcast.utils.exceptions import ValidationError
-from colorcast.utils.validators import ALLOWED_IMAGE_EXTENSIONS
+
+ALLOWED_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
 
 # Constants
 MIN_IMAGE_SIZE = (1, 1)  # Minimum dimensions
 MAX_IMAGE_PIXELS = 50000000  # 50MP default
 MAX_IMAGE_DIMENSION = 8192  # 8K max dimension
+
+
+def validate_image_size(img_array: np.ndarray, max_pixels: int = 50000000) -> None:
+    """
+    Validate image size is within reasonable limits.
+
+    Args:
+        img_array: Image array to validate
+        max_pixels: Maximum allowed pixels (default: 50MP)
+
+    Raises:
+        ValidationError: If image is too large
+    """
+    if img_array.ndim < 2:
+        raise ValidationError("Image must have at least 2 dimensions")
+
+    total_pixels = img_array.shape[0] * img_array.shape[1]
+    if total_pixels > max_pixels:
+        raise ValidationError(
+            f"Image too large: {total_pixels:,} pixels (max: {max_pixels:,})"
+        )
 
 
 def validate_file_path(

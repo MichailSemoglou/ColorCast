@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Type
 import numpy as np
+from colorcast.processing.cache import StyleTransferCache
 
 
 class TransferMethod(ABC):
@@ -75,10 +76,19 @@ class TransferMethod(ABC):
 
 
 class TransferMethodRegistry:
-    """Registry for transfer methods."""
+    """Registry for transfer methods with optional LRU caching.
 
-    def __init__(self):
+    Callers that want to avoid recomputing the same transfer on the same
+    image pair can use :meth:`transfer_cached` instead of creating a
+    method instance and calling :meth:`TransferMethod.transfer` directly.
+    The cache is disabled by default; set ``cache_size`` > 0 to enable it.
+    """
+
+    def __init__(self, cache_size: int = 0):
         self._methods: Dict[str, Type[TransferMethod]] = {}
+        self._cache: Optional[StyleTransferCache] = None
+        if cache_size > 0:
+            self._cache = StyleTransferCache(max_size=cache_size)
 
     def register(self, method_class: Type[TransferMethod]) -> Type[TransferMethod]:
         """
@@ -135,6 +145,61 @@ class TransferMethodRegistry:
             True if method is registered, False otherwise
         """
         return method_id in self._methods
+
+    def transfer_cached(
+        self,
+        method_id: str,
+        source: np.ndarray,
+        reference: Optional[np.ndarray],
+        **kwargs: Any,
+    ) -> np.ndarray:
+        """
+        Apply a transfer method with optional LRU caching.
+
+        If the registry was initialized with ``cache_size > 0``, the result
+        is cached by (content hash, style hash, method id, parameters) and
+        re-used when the same inputs are requested again. Otherwise this is
+        equivalent to ``registry.get_method(method_id).transfer(source,
+        reference, **kwargs)``.
+
+        Args:
+            method_id: Unique identifier of the method
+            source: Source image (H, W, 3)
+            reference: Reference image (H, W, 3), or None for methods with
+                ``requires_reference = False``
+            **kwargs: Method-specific parameters
+
+        Returns:
+            Transferred image (H, W, 3)
+        """
+        method = self.get_method(method_id)
+        if self._cache is None:
+            return method.transfer(source, reference, **kwargs)
+        return self._cache.get_or_compute(
+            self._cache._generate_key(
+                self._cache._compute_hash(source.copy()),
+                self._cache._style_hash(reference),
+                method_id,
+                kwargs,
+            ),
+            lambda: method.transfer(source, reference, **kwargs),
+        )
+
+    def cache_stats(self) -> dict | None:
+        """
+        Return cache statistics, or None if caching is disabled.
+
+        Returns:
+            Dict with ``hits``, ``misses``, ``size`` keys, or None
+        """
+        if self._cache is None:
+            return None
+        return self._cache.stats()
+
+    def clear_cache(self) -> None:
+        """Clear all cached transfer results."""
+        if self._cache is not None:
+            self._cache.clear()
 
 
 # Global registry instance for transfer methods

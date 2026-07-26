@@ -1,6 +1,6 @@
 """Simulate dichromatic color vision in linear sRGB.
 
-This module provides Phase 1 of the accessibility pipeline: it transforms an
+This module provides dichromatic color vision simulation: it transforms an
 RGB image to approximate how a person with Protanopia, Deuteranopia, or
 Tritanopia would perceive it.
 
@@ -114,7 +114,7 @@ class ColorBlindSimulator:
     All simulation methods are fully vectorized (no Python loops) so they
     scale to high-resolution images efficiently.  Every public method returns
     a **float32** NumPy array in [0, 1], making it straightforward to
-    compute per-pixel error maps in a Phase-2 analysis step::
+    compute per-pixel error maps in a downstream analysis step::
 
         original  = image_array.astype(np.float32) / 255
         simulated = simulator.transform_color_space(original, "protanopia")
@@ -233,11 +233,6 @@ class ColorBlindSimulator:
             )
 
         img = normalize_to_float32(image_array)
-        if img.ndim != 3 or img.shape[-1] != 3:
-            raise ValueError(
-                "Expected an (H, W, 3) RGB image; "
-                f"got an array with shape {img.shape}."
-            )
 
         h, w, _ = img.shape
         pixels = img.reshape(-1, 3).astype(np.float64)  # upcast for precision

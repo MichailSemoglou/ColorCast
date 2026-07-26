@@ -1,6 +1,6 @@
 """Daltonization — re-encode lost chromatic information for dichromatic observers.
 
-This module provides Phase 3 of the accessibility pipeline: it takes the signed
+This module provides Daltonization: it takes the signed
 error map produced by :mod:`~colorcast.analysis.error_map` and shifts the lost
 chromatic information into perceptual channels that remain functional for the
 chosen deficiency type.
@@ -23,7 +23,8 @@ The module stores a 3×3 shift matrix for each supported deficiency:
 
 Correction is spatially weighted by the CIE-Lab* chromaticity error map so
 low-error pixels remain largely unchanged, and the original luminance channel
-is restored after correction to prevent brightness drift.
+is restored after correction (except for tritanopia; see below) to prevent
+brightness drift.
 
 For the color-vision science behind this module, see the project wiki:
 "Color-Vision Background".
@@ -64,7 +65,7 @@ from colorcast.processing.image_loader import normalize_to_float32
 #   • SHIFT[i, j] is the coefficient by which error channel j
 #     contributes to output channel i.
 #   • Rows that are zero → that output channel is left unchanged.
-#   • Column weights sum to ≤ 1.0 per output channel to avoid clipping.
+#   • Row sums are ≤ 1.0 per output channel to avoid clipping.
 
 _SHIFT_MATRICES: dict[str, np.ndarray] = {
     # ── Deuteranopia (M-cone missing) ─────────────────────────────────────
@@ -80,8 +81,8 @@ _SHIFT_MATRICES: dict[str, np.ndarray] = {
     ),
     # ── Protanopia (L-cone missing) ───────────────────────────────────────
     # Same opponent axis as deuteranopia (red-green); same redistribution
-    # strategy.  Slightly lower Red coefficient because the L-cone overlap
-    # with the M-cone is higher → the confusion is less asymmetric.
+    # strategy.  Uses the same shift matrix as deuteranopia because both
+    # conditions involve red-green confusion.
     "protanopia": np.array(
         [
             [0.0, 0.0, 0.0],   # ΔR = 0
@@ -118,8 +119,8 @@ def apply_daltonization(
     """Apply the Daltonization correction to *original_img*.
 
     The function re-encodes the chromatic information that was lost in
-    dichromatic simulation (Phase 1) — as measured by the error map
-    (Phase 2) — into a surviving perceptual channel that the affected
+    dichromatic simulation, as measured by the error map,
+    into a surviving perceptual channel that the affected
     observer can discriminate.
 
     The correction is spatially weighted by the CIE Lab* chromaticity
@@ -197,15 +198,14 @@ def apply_daltonization(
     # ── 3. Perceptual (chromaticity) spatial weight ─────────────────────────
     #
     # Subsample the chroma_error array for the percentile calculation when
-    # the image is large. Taking every Nth element gives a statistically
-    # representative estimate of p95 at a fraction of the cost. A stride of
-    # ~1 element per 40k pixels keeps the sample ≥ 2 500 points on any
-    # reasonably sized image while cutting the sort cost significantly.
+    # the image is large.  A stride of ~1 element per 40k pixels keeps the
+    # sample size roughly constant around 40 000 points regardless of image
+    # size.
     ce = error_map.chroma_error
     stride = max(1, ce.size // 40_000)
     p95 = float(np.percentile(ce.flat[::stride], 95))
     if p95 < 1e-6:
-        # Degenerate case: image is essentially uniform — nothing to correct.
+        # The image is already safe under this deficiency; no correction needed.
         return orig.copy()
 
     weight = np.clip(ce / p95, 0.0, 1.0)               # (H, W)
@@ -263,11 +263,11 @@ def daltonize(
 
     A convenience wrapper that chains all three phases into a single call:
 
-    1. **Phase 1 (Simulation)**: Generate what the image looks like through the
-       dichromat's visual system using the Smith-Pokorny cone model.
-    2. **Phase 2 (Error Map)**: Measure the signed chromatic difference between
-       original and simulated in both RGB and CIE Lab* space.
-    3. **Phase 3 (Daltonization)**: Re-inject the lost information via the
+     1. **Color vision simulation**: Generate what the image looks like through the
+        dichromat's visual system using the Smith-Pokorny cone model.
+     2. **Error map**: Measure the signed chromatic difference between
+        original and simulated in both RGB and CIE Lab* space.
+     3. **Daltonization**: Re-inject the lost information via the
        appropriate shift matrix, weighted by the per-pixel chroma error, with
        luminance preservation.
 

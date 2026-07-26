@@ -1,6 +1,6 @@
 """Compute error maps between an original image and its dichromatic simulation.
 
-This module provides Phase 2 of the Daltonization pipeline: it measures the
+This module computes error maps: it measures the
 per-pixel and chromaticity-only difference between an original RGB image and
 the output of :class:`~colorcast.processing.simulation.ColorBlindSimulator`.
 
@@ -50,10 +50,10 @@ class ErrorMap(NamedTuple):
     signed : np.ndarray
         Signed per-pixel RGB difference ``original − simulated``,
         shape (H, W, 3), dtype float32, range roughly [−1, 1].
-        **This is the direct input to the Daltonization step (Phase 3).**
-        A corrected image can be computed as::
-
-            corrected = np.clip(original + alpha * signed, 0, 1)
+        **This is the direct input to Daltonization.**
+        Pass it to :func:`~colorcast.analysis.daltonization.apply_daltonization`
+        together with the original image, the deficiency type, and an
+        intensity value.
 
     absolute : np.ndarray
         Absolute magnitude ``|signed|``, shape (H, W, 3), dtype float32,
@@ -64,13 +64,13 @@ class ErrorMap(NamedTuple):
         Computed as the CIE-Lab* Euclidean distance in the (a*, b*) plane,
         ignoring luminance (L*).  Range [0, ∞), typically ≤ 100.
         Higher values indicate stronger colour confusion that Daltonization
-        must correct.  This is the **blueprint** for Phase 3: the spatial
+        must correct.  The spatial
         pattern of ``chroma_error`` tells the corrector *where* and *how
         much* to shift hues.
 
     signed_chroma_ab : np.ndarray
         Signed (a*, b*) difference in Lab* space, shape (H, W, 2),
-        dtype float32.  Needed if Phase 3 corrects directly in Lab* rather
+        dtype float32.  Needed if the correction is applied directly in Lab* rather
         than RGB.
 
     orig_l_star : np.ndarray
@@ -130,8 +130,9 @@ def get_error_map(
     >>> sim = ColorBlindSimulator()
     >>> simulated = sim.transform_color_space(original, "deuteranopia")
     >>> em = get_error_map(original, simulated)
-    >>> # Phase-3 Daltonization (simple additive correction):
-    >>> corrected = np.clip(original + 0.8 * em.signed, 0, 1)
+    >>> # Daltonization (see apply_daltonization in daltonization.py):
+    >>> from colorcast.analysis.daltonization import apply_daltonization
+    >>> corrected = apply_daltonization(original, em, "deuteranopia", intensity=0.8)
     """
     # -- Input normalisation --------------------------------------------------
     orig = normalize_to_float32(np.asarray(original_img))
@@ -148,7 +149,7 @@ def get_error_map(
 
     # -- 1. Signed difference (RGB) ------------------------------------------
     # The direction is important: positive → original was stronger in that
-    # channel.  Phase 3 will *add* a fraction of this back to the original.
+    # channel.  Daltonization will *add* a fraction of this back to the original.
     signed = orig - sim  # float32, range ≈ [−1, 1]
 
     # -- 2. Absolute magnitude (RGB) -----------------------------------------
@@ -188,11 +189,11 @@ def get_error_map(
     #     that a trichromat can; these pixels need the most correction.
     #   • Low values  → pixels where the simulation barely differs; little or
     #     no correction needed.
-    # Phase 3 will use this map (or signed_chroma_ab) to decide where and how
+    # Daltonization uses this map (or signed_chroma_ab) to decide where and how
     # strongly to boost colour contrasts.
     chroma_error = np.sqrt(a_diff ** 2 + b_diff ** 2)  # (H, W) float32
 
-    # Cache the original L* channel so downstream callers (Phase 3) can
+    # Cache the original L* channel so downstream callers can
     # restore luminance without recomputing rgb2lab on the original image.
     orig_l_star = orig_lab[:, :, 0].astype(np.float32)  # (H, W)
 
@@ -219,11 +220,11 @@ def plot_error_heatmap(
 ):
     """Render the error analysis as an annotated Matplotlib figure.
 
-    The heatmap uses the *chromaticity* error (|Δa*| + |Δb*| in Lab* space)
-    to highlight pixels where the simulation diverges in pure colour terms,
-    ignoring brightness.  Areas glowing bright on the 'magma' colormap are
+    The heatmap uses the *chromaticity* error (Euclidean distance in the (a*, b*)
+    plane of Lab* space) to highlight pixels where the simulation diverges in pure
+    colour terms, ignoring brightness.  Areas glowing bright on the 'magma' colormap are
     where a dichromat's colour discrimination is most impaired — exactly the
-    regions that Phase 3 Daltonization must correct most aggressively.
+    regions that Daltonization must correct most aggressively.
 
     Parameters
     ----------
@@ -258,12 +259,8 @@ def plot_error_heatmap(
 
     # -- Optional: show original and simulated --------------------------------
     if show_images:
-        orig_disp = np.clip(np.asarray(original_img, dtype=np.float32), 0, 1)
-        sim_disp  = np.clip(np.asarray(simulated_img, dtype=np.float32), 0, 1)
-        if orig_disp.max() > 1.0:
-            orig_disp /= 255.0
-        if sim_disp.max() > 1.0:
-            sim_disp /= 255.0
+        orig_disp = normalize_to_float32(np.asarray(original_img, dtype=np.float32))
+        sim_disp  = normalize_to_float32(np.asarray(simulated_img, dtype=np.float32))
 
         axes[col].imshow(orig_disp)
         axes[col].set_title("Original", fontsize=11)
@@ -278,11 +275,11 @@ def plot_error_heatmap(
     # -- Chromaticity error heatmap -------------------------------------------
     # chroma_error is the Euclidean (a*, b*) distance: pure colour loss.
     # Bright pixels = regions of high colour confusion → high priority for
-    # Phase-3 Daltonization correction.
+    # Daltonization correction.
     im = axes[col].imshow(error_map.chroma_error, cmap=colormap, interpolation="nearest")
     axes[col].set_title("Chromaticity Error\n(|Δa*|² + |Δb*|²)^½", fontsize=11)
     axes[col].axis("off")
-    fig.colorbar(im, ax=axes[col], fraction=0.046, pad=0.04, label="ΔE (Lab*)")
+    fig.colorbar(im, ax=axes[col], fraction=0.046, pad=0.04, label="chroma error (a*, b*)")
     col += 1
 
     # -- Absolute RGB magnitude heatmap (greyscale per-channel) ---------------

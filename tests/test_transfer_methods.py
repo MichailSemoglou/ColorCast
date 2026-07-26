@@ -8,7 +8,6 @@ from colorcast.processing.transfer_methods import (
     lut_transfer_with_curve,
     selective_color_transfer,
 )
-from colorcast.utils.exceptions import InvalidImageFormatError
 
 
 class TestHistogramMatching:
@@ -22,7 +21,7 @@ class TestHistogramMatching:
         result = match_histograms_multichannel(source, reference)
 
         assert result.shape == source.shape
-        assert result.dtype == np.float64
+        assert result.dtype == np.float32
         assert np.all(result >= 0) and np.all(result <= 1)
 
     def test_histogram_matching_different_sizes(self):
@@ -39,7 +38,7 @@ class TestHistogramMatching:
         source = np.random.rand(100, 100)  # 2D image
         reference = np.random.rand(100, 100, 3)
 
-        with pytest.raises(InvalidImageFormatError):
+        with pytest.raises(ValueError):
             match_histograms_multichannel(source, reference)
 
     def test_histogram_matching_invalid_input_4d(self):
@@ -47,7 +46,7 @@ class TestHistogramMatching:
         source = np.random.rand(100, 100, 3, 2)  # 4D image
         reference = np.random.rand(100, 100, 3)
 
-        with pytest.raises(InvalidImageFormatError):
+        with pytest.raises(ValueError):
             match_histograms_multichannel(source, reference)
 
 

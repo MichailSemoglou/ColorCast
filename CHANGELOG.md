@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.4.0] – 2026-07-26
+
+### Added
+
+- `tests/test_validators_enhanced.py` with 11 tests covering extension-spoofed file rejection, NaN and Inf pixel detection, and malformed shape rejection via `normalize_to_float32`.
+- `TransferMethodRegistry.transfer_cached` for optional LRU-cached style transfer, with `cache_stats` and `clear_cache`. The cache is disabled by default; set ``cache_size`` > 0 on the registry constructor to enable it.
+
+### Changed
+
+- `normalize_to_float32` (`colorcast/processing/image_loader.py`) now validates that the input has shape `(H, W, 3)` before normalization, raising `ValueError` with the actual shape if not. Callers that pass 2D grayscale or 4-channel RGBA arrays must route through `ensure_rgb` first.
+- Image loading now validates file magic numbers via `validate_image_file` to reject extension-spoofed files, and validates loaded arrays via `validate_image_array` to reject NaN/Inf pixel values. Imports in `colorcast/processing/image_loader.py` and `colorcast/utils/__init__.py` route through `colorcast.utils.validators_enhanced`, which is now the single authoritative validation module.
+- `colorcast.utils.validators` reduced to a re-export shim that emits a `DeprecationWarning`; all logic moved to `colorcast.utils.validators_enhanced`.
+- `transfer_methods.validate_and_resize_images` now normalizes both inputs to float32 in [0, 1] via `normalize_to_float32`, enforcing the documented value-range contract for all five transfer functions.
+- `CITATION.cff` and `.zenodo.json` abstracts and keywords updated to lead with the accessibility pipeline and Daltonization.
+- Removed `matplotlib.use('Agg')` from `visualization.py` (it followed `import pyplot` and had no effect).
+
+### Fixed
+
+- `MethodComparison.find_best_method` returned the worst method for distance metrics (`color_distance`, `histogram_distance`) because `rank_methods` defaulted to `ascending=False`. Metric direction is now inferred automatically from a module-level mapping; the `ascending` parameter defaults to `None` (infer from the metric).
+- `MethodComparison.compute_histogram_distance` documented Earth Mover's Distance but computed L1 distance between normalized histograms, saturating at 2.0 for any non-overlapping pair. Replaced with 1-D EMD (`|cumsum(hist1) - cumsum(hist2)|`).
+- `MethodComparison.compare_methods` computed baseline `color_distance` as `d(source, reference)` instead of zero, and the baseline row could appear in rankings and `find_best_method`. Baseline `color_distance` is now zero; baseline is excluded from ranking.
+- `MethodComparison.compare_methods` had no per-method exception handling; one failing method aborted the whole comparison. Failures are now recorded with NaN metrics and an `_error` field, and excluded from ranking.
+- `MethodComparison.generate_comparison_report` header and rule widths mismatched (75 vs 60). Both now use a single `rule_width` value.
+- `ColorBlindSimulator.transform_color_space` had a redundant `(H, W, 3)` shape guard after `normalize_to_float32`, which already validates the shape.
+- `plot_error_heatmap` could not display integer input because `np.clip` to [0, 1] preceded the uint8 rescale test. Replaced with `normalize_to_float32`.
+- `plot_error_heatmap` colorbar label read `ΔE (Lab*)`, which falsely implies L* is included; corrected to `chroma error (a*, b*)`.
+- `comparison.py` migrated from `typing.Dict/List/Tuple` to `from __future__ import annotations` with builtin generics, matching the rest of the codebase.
+
+v2.4.0 · released July 2026 · MIT
+
 ## [2.3.0] – 2026-07-23
 
 ### Added

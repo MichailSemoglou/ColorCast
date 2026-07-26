@@ -90,3 +90,6 @@ softwareX/
 
 # Local roadmap
 /ROADMAP.md
+
+# Kilo local configuration
+/kilo.json

@@ -2,9 +2,9 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
 title: "ColorCast: Color Transfer Toolkit for Python"
-version: 2.3.0
+version: 2.4.0
 date-released: 2026-07-23
-abstract: "ColorCast is a Python toolkit for color and style transfer between images. It provides multiple algorithms including histogram matching, mean/std transfer, LUT-based curves, selective regional transfer, and GPU acceleration. The toolkit supports both GUI and CLI interfaces with caching and batch processing capabilities."
+abstract: "ColorCast is a Python toolkit for color and style transfer between images. Its accessibility pipeline simulates protanopia, deuteranopia, and tritanopia using Vienot (1999) and Brettel (1997) linear-RGB matrices; the Daltonization module re-encodes lost chromatic information into surviving perceptual channels, making color differences visible to dichromatic observers. It also provides histogram matching, mean/std transfer, LUT-based curves, and selective regional transfer via CLI, GUI, and library API."
 authors:
   - family-names: Semoglou
     given-names: Michail
@@ -18,11 +18,10 @@ doi: 10.5281/zenodo.18550038
 keywords:
   - color transfer
   - image processing
-  - histogram matching
-  - Reinhard algorithm
-  - Lab color space
-  - color grading
+  - color vision deficiency
+  - daltonization
+  - accessibility
+  - dichromacy
+  - colorimetry
   - Python
-  - GPU acceleration
-  - CuPy
   - computer vision

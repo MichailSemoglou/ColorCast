@@ -60,7 +60,7 @@ class TestColorBlindSimulator:
     def test_non_rgb_shape_raises(self, simulator, bad_shape):
         image = np.random.rand(*bad_shape).astype(np.float32)
 
-        with pytest.raises(ValueError, match="RGB"):
+        with pytest.raises(ValueError, match="shape.*\\(H, W, 3\\)"):
             simulator.transform_color_space(image, "deuteranopia")
 
     def test_supported_deficiencies_single_source(self):

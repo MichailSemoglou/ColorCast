@@ -3,36 +3,32 @@
 from typing import Literal
 import numpy as np
 from skimage import exposure, transform, color
-from colorcast.utils.exceptions import InvalidImageFormatError
+from colorcast.processing.image_loader import normalize_to_float32
 
 
 def validate_and_resize_images(source: np.ndarray, reference: np.ndarray) -> tuple:
     """
-    Validate and ensure both images are compatible for processing.
+    Validate shape, normalize dtype and value range, and ensure both images
+    are compatible for processing.
+
+    Inputs may be any numeric dtype; they are normalized to float32 in [0, 1]
+    via :func:`normalize_to_float32`, which also validates the ``(H, W, 3)``
+    shape.
 
     Args:
-        source: Source image array (H, W, 3)
-        reference: Reference image array (H, W, 3)
+        source: Source image array (H, W, 3), any numeric dtype
+        reference: Reference image array (H, W, 3), any numeric dtype
 
     Returns:
-        Tuple of (validated_source, validated_reference)
+        Tuple of (validated_source, validated_reference) as float32 in [0, 1]
 
     Raises:
-        InvalidImageFormatError: If images have incorrect dimensions
+        ValueError: If either image does not have shape (H, W, 3)
+        TypeError: If either image has a signed integer dtype
     """
-    # Validate source
-    if source.ndim != 3 or source.shape[2] != 3:
-        raise InvalidImageFormatError(
-            "Source image is not 3-channel RGB after preprocessing."
-        )
+    source = normalize_to_float32(source)
+    reference = normalize_to_float32(reference)
 
-    # Validate reference
-    if reference.ndim != 3 or reference.shape[2] != 3:
-        raise InvalidImageFormatError(
-            "Reference image is not 3-channel RGB after preprocessing."
-        )
-
-    # Resize if needed
     if source.shape != reference.shape:
         reference = transform.resize(
             reference, source.shape, anti_aliasing=True, preserve_range=True
@@ -187,7 +183,7 @@ def color_transfer_lab(
         Color-transferred image array (H, W, 3) in range [0, 1]
 
     Raises:
-        InvalidImageFormatError: If images have incorrect dimensions
+        ValueError: If images have incorrect dimensions
     """
     source, reference = validate_and_resize_images(source, reference)
     
