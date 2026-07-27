@@ -1,11 +1,38 @@
 # Changelog
 
-## [2.4.0] – 2026-07-26
+## [2.4.2] – 2026-07-27
+
+### Added
+
+- 148 new tests across 6 test files, raising coverage from 51% to 69%:
+  - `tests/test_curves.py` -- 13 tests for `apply_curve` (all curve types, edge cases)
+  - `tests/test_gpu_transfer.py` -- 21 tests for GPU transfer CPU fallback paths across `gpu_histogram_matching`, `gpu_mean_std_transfer`, `gpu_lab_transfer`, and `gpu_histogram_matching_multichannel`
+  - `tests/test_config.py` -- 21 tests for `ColorCastConfig` save/load roundtrip, defaults, unknown-key filtering, and `get_config_path`
+  - `tests/test_comparison.py` -- 46 tests for `MethodComparison` metrics (PSNR, SSIM, color distance, histogram distance), method comparison orchestration, ranking with auto-inferred directions, report generation, `find_best_method`, and metric direction constants
+  - `tests/test_visualization.py` -- 21 tests for all 4 figure-creation functions across `show_histograms` and `show_difference` parameter combinations
+  - `tests/test_cli.py` -- 21 tests for `parse_args`, `cmd_transfer` (simulator, style-required, intensity blend), `cmd_batch`, `cmd_list_methods`, `cmd_info`, and `main` entry point
+- Autouse `close_figures` fixture in `tests/test_visualization.py` closes all Matplotlib figures after every test, including parameterized cases, preventing figure handle accumulation between runs.
+- Regression test `test_get_or_compute_concurrent_same_key` in `tests/test_cache.py` covers the double-check path in `get_or_compute`: two threads both miss the first lock check; the second caller returns the value stored by the first and the cache holds exactly one entry.
+
+### Fixed
+
+- `gpu_mean_std_transfer` divided by 255 and multiplied by 255 in the GPU branch despite the [0, 1] float input contract documented for the function and followed by the CPU fallback, producing silently wrong output when CuPy was available. The GPU branch now matches the [0, 1] contract.
+- `selective_color_transfer` documented continuous blending masks ("0.0 to 1.0 for smooth blending at boundaries") but produced hard binary masks via `.astype(float)` on boolean arrays, leaving visible seams at shadow and highlight thresholds. Replaced with smoothstep feathered masks over a `\u00b1 0.05` luminance band.
+- `StyleTransferCache` was not thread-safe (plain int counters and compound `OrderedDict` read-modify-write operations), though documented for use with the threaded batch path. Added a `threading.Lock` around all cache mutations.
+- `validate_file_path` used `str.startswith` to check base-directory containment, admitting `/data-leaks` when the base was `/data`. Replaced with `Path.relative_to` in a try/except block.
+- `_compute_hash` hashed the full image bytes on every cache get and set, making the LRU path slower than the transfer it was meant to cache for large images. Now hashes shape, dtype, strides, and a downsampled fingerprint instead.
+- `ColorCastConfig.load` passed every key from a user-edited `config.json` directly to `cls(**data)`, raising `TypeError` on unknown keys and accepting arbitrary values for known keys. Now filters data to known dataclass fields before construction.
+- `ColorCastConfig.cache_size` and `enable_parallel` were dead configuration fields. `enable_parallel` is now wired into `BatchProcessor` (caps `max_workers` to 1 when false); `cache_size` is documented as informational.
+- `MethodComparison.compute_histogram_distance` divided by `hist.sum()` without guarding zero, producing NaN metrics on empty or degenerate channels. Both histograms now guard the divisor.
+- `visualize_method_comparison` in `colorcast/analysis/visualization.py` raised `UnboundLocalError` when called with a custom `figsize` because the `n_rows` variable was assigned only inside the `if figsize is None:` branch. `n_rows` is now computed before that branch.
+- Added a missing import and updated docstrings in GPU functions.
+
+## [2.4.0] - 2026-07-26
 
 ### Added
 
 - `tests/test_validators_enhanced.py` with 11 tests covering extension-spoofed file rejection, NaN and Inf pixel detection, and malformed shape rejection via `normalize_to_float32`.
-- `TransferMethodRegistry.transfer_cached` for optional LRU-cached style transfer, with `cache_stats` and `clear_cache`. The cache is disabled by default; set ``cache_size`` > 0 on the registry constructor to enable it.
+- `TransferMethodRegistry.transfer_cached` for optional LRU-cached style transfer, with `cache_stats` and `clear_cache`. The cache is disabled by default; set `cache_size` > 0 on the registry constructor to enable it.
 
 ### Changed
 
@@ -25,7 +52,7 @@
 - `MethodComparison.generate_comparison_report` header and rule widths mismatched (75 vs 60). Both now use a single `rule_width` value.
 - `ColorBlindSimulator.transform_color_space` had a redundant `(H, W, 3)` shape guard after `normalize_to_float32`, which already validates the shape.
 - `plot_error_heatmap` could not display integer input because `np.clip` to [0, 1] preceded the uint8 rescale test. Replaced with `normalize_to_float32`.
-- `plot_error_heatmap` colorbar label read `ΔE (Lab*)`, which falsely implies L* is included; corrected to `chroma error (a*, b*)`.
+- `plot_error_heatmap` colorbar label read `ΔE (Lab*)`, which falsely implies L* is included; corrected to `chroma error (a*, b\*)`.
 - `comparison.py` migrated from `typing.Dict/List/Tuple` to `from __future__ import annotations` with builtin generics, matching the rest of the codebase.
 
 v2.4.0 · released July 2026 · MIT

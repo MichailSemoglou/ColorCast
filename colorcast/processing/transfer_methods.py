@@ -276,18 +276,26 @@ def selective_color_transfer(
         0.299 * source[:, :, 0] + 0.587 * source[:, :, 1] + 0.114 * source[:, :, 2]
     )
 
-    # Create binary mask based on selected tonal region
-    # Masks are continuous (0.0 to 1.0) for smooth blending at boundaries
+    # Build continuous masks via smoothstep over a narrow band around each
+    # threshold to avoid hard edges at the boundary.
+    _band = 0.05
+
+    def _smoothstep(lo, hi, x):
+        t = np.clip((x - lo) / (hi - lo), 0.0, 1.0)
+        return t * t * (3.0 - 2.0 * t)
+
     if mode == "full":
         mask = np.ones_like(source_lum)
     elif mode == "shadows":
-        mask = (source_lum < shadow_threshold).astype(float)
+        mask = 1.0 - _smoothstep(shadow_threshold - _band, shadow_threshold + _band, source_lum)
     elif mode == "midtones":
-        mask = (
-            (source_lum >= shadow_threshold) & (source_lum <= highlight_threshold)
-        ).astype(float)
+        lo_mask = _smoothstep(shadow_threshold - _band, shadow_threshold + _band, source_lum)
+        hi_mask = 1.0 - _smoothstep(
+            highlight_threshold - _band, highlight_threshold + _band, source_lum
+        )
+        mask = lo_mask * hi_mask
     elif mode == "highlights":
-        mask = (source_lum > highlight_threshold).astype(float)
+        mask = _smoothstep(highlight_threshold - _band, highlight_threshold + _band, source_lum)
     else:
         raise ValueError(f"Invalid mode: {mode}")
 

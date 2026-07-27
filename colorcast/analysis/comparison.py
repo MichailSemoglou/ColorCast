@@ -6,6 +6,7 @@ using quantitative metrics like PSNR, SSIM, and color distance.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import numpy as np
 from skimage.metrics import structural_similarity as ssim
 
@@ -115,8 +116,10 @@ class MethodComparison:
             hist2, _ = np.histogram(img2[:, :, i], bins=bins, range=(0, 1))
             
             # Normalize histograms
-            hist1 = hist1 / hist1.sum()
-            hist2 = hist2 / hist2.sum()
+            hist1_sum = hist1.sum()
+            hist2_sum = hist2.sum()
+            hist1 = hist1 / (hist1_sum if hist1_sum > 0 else 1)
+            hist2 = hist2 / (hist2_sum if hist2_sum > 0 else 1)
             
             # Compute 1-D Earth Mover's Distance (L1 of cumulative histograms)
             distance = np.sum(np.abs(np.cumsum(hist1) - np.cumsum(hist2)))

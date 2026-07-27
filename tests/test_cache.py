@@ -1,5 +1,7 @@
 """Tests for LRU cache functionality."""
 
+import threading
+
 import pytest
 import numpy as np
 from colorcast.processing.cache import StyleTransferCache
@@ -146,3 +148,60 @@ class TestStyleTransferCache:
         # A style-keyed entry for the same content is a different key
         style = np.random.rand(50, 50, 3)
         assert cache.get(content, style, "simulate_protanopia") is None
+
+    def test_get_or_compute_concurrent_same_key(self):
+        """Second caller returns the cached result from the first computation.
+
+        Regression test for the double-check inside get_or_compute: when two
+        threads both miss the first lock check and the first thread stores its
+        result before the second completes, the second thread must return the
+        already-cached value and the cache must contain exactly one entry.
+        """
+        cache = StyleTransferCache(max_size=8)
+        content = np.zeros((4, 4, 3), dtype=np.float32)
+        style = np.zeros((4, 4, 3), dtype=np.float32)
+        key = cache._generate_key(
+            cache._compute_hash(content),
+            cache._style_hash(style),
+            "histogram",
+            {},
+        )
+
+        first_value = np.full((4, 4, 3), 0.1, dtype=np.float32)
+        second_value = np.full((4, 4, 3), 0.9, dtype=np.float32)
+
+        # Thread 1 blocks in its compute_func until thread 2 has also passed
+        # the first lock check, so both callers miss the initial lookup.
+        # Thread 2 then blocks until thread 1 has stored its result, ensuring
+        # the second lock check in thread 2 sees the populated cache.
+        second_is_computing = threading.Event()
+        first_has_stored = threading.Event()
+        results = {}
+
+        def compute_first():
+            second_is_computing.wait(timeout=5.0)
+            return first_value
+
+        def compute_second():
+            second_is_computing.set()
+            first_has_stored.wait(timeout=5.0)
+            return second_value
+
+        def thread1_fn():
+            results["first"] = cache.get_or_compute(key, compute_first)
+            first_has_stored.set()
+
+        def thread2_fn():
+            results["second"] = cache.get_or_compute(key, compute_second)
+
+        t1 = threading.Thread(target=thread1_fn)
+        t2 = threading.Thread(target=thread2_fn)
+        t1.start()
+        t2.start()
+        t1.join(timeout=10.0)
+        t2.join(timeout=10.0)
+
+        assert not t1.is_alive(), "thread 1 did not complete"
+        assert not t2.is_alive(), "thread 2 did not complete"
+        assert cache.size() == 1
+        np.testing.assert_array_equal(results["second"], first_value)

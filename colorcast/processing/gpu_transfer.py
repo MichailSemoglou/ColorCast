@@ -24,7 +24,12 @@ def gpu_histogram_matching(
 ) -> np.ndarray:
     """
     GPU-accelerated histogram matching using CuPy.
-    
+
+    Note: The CuPy path currently copies channel data to the CPU for
+    histogram matching via scikit-image and transfers results back.
+    It is therefore no faster than the CPU fallback.  A native GPU
+    histogram implementation is planned.
+
     Args:
         source: Source image array (H, W, 3) in range [0, 255]
         reference: Reference image array (H, W, 3) in range [0, 255]
@@ -102,34 +107,34 @@ def gpu_mean_std_transfer(
         
         return np.clip(result, 0, 1).astype(source.dtype)
     
-    # Convert to GPU arrays in range [0, 1]
-    source_gpu = cp.asarray(source, dtype=cp.float32) / 255.0
-    reference_gpu = cp.asarray(reference, dtype=cp.float32) / 255.0
-    
+    # Convert to GPU arrays (images are already float32 in [0, 1])
+    source_gpu = cp.asarray(source, dtype=cp.float32)
+    reference_gpu = cp.asarray(reference, dtype=cp.float32)
+
     # Compute mean and std transfer per channel on GPU
     result_gpu = cp.empty_like(source_gpu)
     for i in range(3):
         source_channel = source_gpu[:, :, i]
         reference_channel = reference_gpu[:, :, i]
-        
+
         # Compute statistics on GPU
         source_mean = cp.mean(source_channel)
         source_std = cp.std(source_channel)
         ref_mean = cp.mean(reference_channel)
         ref_std = cp.std(reference_channel)
-        
+
         # Apply transfer
         epsilon = 1e-8
         result_gpu[:, :, i] = (
             (source_channel - source_mean)
             * (ref_std / (source_std + epsilon))
         ) + ref_mean
-    
-    # Clip to [0, 1] and convert back to [0, 255]
+
+    # Clip to [0, 1]
     result_gpu = cp.clip(result_gpu, 0, 1)
-    result = cp.asnumpy(result_gpu) * 255.0
-    result = np.clip(result, 0, 255).astype(source.dtype)
-    
+    result = cp.asnumpy(result_gpu)
+    result = np.clip(result, 0, 1).astype(source.dtype)
+
     return result
 
 
@@ -140,7 +145,11 @@ def gpu_lab_transfer(
 ) -> np.ndarray:
     """
     GPU-accelerated Lab color space transfer using CuPy.
-    
+
+    Note: CuPy has no rgb2lab/lab2rgb equivalent, so both the GPU and
+    CPU branches route through scikit-image on the CPU.  A native GPU
+    Lab pipeline is planned.
+
     Args:
         source: Source image array (H, W, 3) in range [0, 1]
         reference: Reference image array (H, W, 3) in range [0, 1]
@@ -155,11 +164,11 @@ def gpu_lab_transfer(
 
         # Clamp alpha
         alpha = np.clip(alpha, 0.0, 1.0)
-        
+
         # Convert RGB to Lab color space
         source_lab = color.rgb2lab(source)
         reference_lab = color.rgb2lab(reference)
-        
+
         # Compute statistics in Lab space
         result_lab = np.empty_like(source_lab)
         for i in range(3):
@@ -168,39 +177,38 @@ def gpu_lab_transfer(
             source_std = np.std(source_lab[:, :, i])
             ref_mean = np.mean(reference_lab[:, :, i])
             ref_std = np.std(reference_lab[:, :, i])
-            
+
             # Apply statistical transfer
             epsilon = 1e-8
             result_lab[:, :, i] = (
                 (source_lab[:, :, i] - source_mean)
                 * (ref_std / (source_std + epsilon))
             ) + ref_mean
-        
+
         # Clip to valid Lab ranges
         result_lab[:, :, 0] = np.clip(result_lab[:, :, 0], 0, 100)  # L channel
         result_lab[:, :, 1] = np.clip(result_lab[:, :, 1], -128, 127)  # a channel
         result_lab[:, :, 2] = np.clip(result_lab[:, :, 2], -128, 127)  # b channel
-        
+
         # Apply alpha blending for partial transfer
         if alpha < 1.0:
             result_lab = source_lab * (1 - alpha) + result_lab * alpha
-        
+
         # Convert Lab back to RGB
         result_rgb = color.lab2rgb(result_lab)
-        
+
         # Ensure result is in valid range [0, 1]
         result_rgb = np.clip(result_rgb, 0, 1).astype(source.dtype)
-        
+
         return result_rgb
 
-    # Clamp alpha
+    # CuPy has no rgb2lab/lab2rgb equivalent — both branches route through
+    # scikit-image on the CPU.  This block exists to preserve the API shape
+    # until a native GPU Lab pipeline lands.
+    from skimage import color
+
     alpha = float(alpha)
     alpha = max(0.0, min(1.0, alpha))
-
-    # CuPy has no rgb2lab/lab2rgb equivalent. Routing through the CPU
-    # implementation avoids mixing CPU color-space conversions with GPU
-    # statistics operations and the two full-frame transfers that implies.
-    from skimage import color
 
     source_lab = color.rgb2lab(source)
     reference_lab = color.rgb2lab(reference)

@@ -17,6 +17,7 @@ class BatchProcessor:
         self,
         transfer_method: Callable,
         max_workers: int = 4,
+        enable_parallel: bool = True,
         progress_callback: Optional[Callable[[int, int], None]] = None,
     ):
         """
@@ -24,11 +25,14 @@ class BatchProcessor:
 
         Args:
             transfer_method: Function to apply transfer
-            max_workers: Number of parallel workers (default: 4)
+            max_workers: Number of parallel workers (default: 4). Ignored
+                when ``enable_parallel=False``.
+            enable_parallel: When False, process images sequentially
+                regardless of ``max_workers``.
             progress_callback: Optional callback(int processed, int total)
         """
         self.transfer_method = transfer_method
-        self.max_workers = max_workers
+        self.max_workers = 1 if not enable_parallel else max_workers
         self.progress_callback = progress_callback
         self.failed_files: List[Tuple[Path, str]] = []
 
@@ -140,6 +144,9 @@ class BatchProcessor:
         results = []
         failed_pairs = []
 
+        # Process each pair sequentially.  Unlike process_directory, every
+        # pair carries its own style image so the shared-style-image
+        # parallelisation pattern does not apply.
         for i, (content_path, style_path) in enumerate(image_pairs):
             try:
                 content = load_image(str(content_path))

@@ -158,8 +158,9 @@ def visualize_method_comparison(
     """
     n_methods = len(images)
     
+    n_rows = 2 if show_difference else 1
+
     if figsize is None:
-        n_rows = 2 if show_difference else 1
         figsize = (5 * (n_methods + 1), 5 * n_rows)
     
     fig, axes = plt.subplots(n_rows, n_methods + 1, figsize=figsize)

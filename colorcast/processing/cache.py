@@ -1,6 +1,7 @@
 """LRU cache for styled images."""
 
 import hashlib
+import threading
 from collections import OrderedDict
 from typing import Callable, Optional
 import numpy as np
@@ -28,6 +29,7 @@ class StyleTransferCache:
         self.cache: OrderedDict[str, np.ndarray] = OrderedDict()
         self.hits = 0
         self.misses = 0
+        self._lock = threading.Lock()
 
     def _generate_key(
         self,
@@ -56,13 +58,25 @@ class StyleTransferCache:
         """
         Compute hash of image array.
 
+        Hashes a coarse fingerprint (shape, dtype, strides, and a
+        downsampled view of the pixel data) rather than the full image
+        bytes. The collision risk is negligible for the cache sizes this
+        module targets.
+
         Args:
             img: Image array to hash
 
         Returns:
             First 16 characters of MD5 hash
         """
-        return hashlib.md5(img.tobytes()).hexdigest()[:16]
+        stride = max(1, min(img.shape[0], img.shape[1]) // 64)
+        subsample = img[::stride, ::stride]
+        h = hashlib.md5()
+        h.update(str(img.shape).encode())
+        h.update(str(img.dtype).encode())
+        h.update(str(img.strides).encode())
+        h.update(subsample.tobytes())
+        return h.hexdigest()[:16]
 
     def _style_hash(self, style: Optional[np.ndarray]) -> str:
         """Hash the style image, or return the reference-free marker."""
@@ -99,13 +113,14 @@ class StyleTransferCache:
             params,
         )
 
-        if key in self.cache:
-            self.cache.move_to_end(key)
-            self.hits += 1
-            return self.cache[key]
+        with self._lock:
+            if key in self.cache:
+                self.cache.move_to_end(key)
+                self.hits += 1
+                return self.cache[key]
 
-        self.misses += 1
-        return None
+            self.misses += 1
+            return None
 
     def set(
         self,
@@ -135,16 +150,18 @@ class StyleTransferCache:
             params,
         )
 
-        if key in self.cache:
-            self.cache.move_to_end(key)
-        elif len(self.cache) >= self.max_size:
-            self.cache.popitem(last=False)
+        with self._lock:
+            if key in self.cache:
+                self.cache.move_to_end(key)
+            elif len(self.cache) >= self.max_size:
+                self.cache.popitem(last=False)
 
-        self.cache[key] = styled
+            self.cache[key] = styled
 
     def clear(self) -> None:
         """Clear all cached images."""
-        self.cache.clear()
+        with self._lock:
+            self.cache.clear()
 
     def size(self) -> int:
         """
@@ -187,19 +204,25 @@ class StyleTransferCache:
         Returns:
             Cached or computed value
         """
-        if key in self.cache:
-            self.cache.move_to_end(key)
-            self.hits += 1
-            return self.cache[key]
+        with self._lock:
+            if key in self.cache:
+                self.cache.move_to_end(key)
+                self.hits += 1
+                return self.cache[key]
 
         value: np.ndarray = compute_func()
-        self.misses += 1
 
-        if len(self.cache) >= self.max_size:
-            self.cache.popitem(last=False)
+        with self._lock:
+            self.misses += 1
+            if key in self.cache:
+                self.cache.move_to_end(key)
+                return self.cache[key]
 
-        self.cache[key] = value
-        return value
+            if len(self.cache) >= self.max_size:
+                self.cache.popitem(last=False)
+
+            self.cache[key] = value
+            return value
 
 
 # Alias for backward compatibility

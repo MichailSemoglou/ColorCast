@@ -109,10 +109,15 @@ def validate_file_path(
     
     # Check if path is within allowed directories
     if allowed_base_dirs is not None:
-        is_allowed = any(
-            str(resolved_path).startswith(str(base_dir.resolve()))
-            for base_dir in allowed_base_dirs
-        )
+        is_allowed = False
+        for base_dir in allowed_base_dirs:
+            resolved_base = base_dir.resolve()
+            try:
+                resolved_path.relative_to(resolved_base)
+                is_allowed = True
+                break
+            except ValueError:
+                continue
         if not is_allowed:
             raise ValidationError(
                 f"Path not within allowed directories: "

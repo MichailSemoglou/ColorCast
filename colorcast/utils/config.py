@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 from typing import Dict, Any
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, fields, field
 
 
 @dataclass
@@ -22,8 +22,8 @@ class ColorCastConfig:
 
     # Performance settings
     max_image_dimension: int = 4096
-    cache_size: int = 3
-    enable_parallel: bool = True
+    cache_size: int = 3  # informational (global registry owns its own sizing)
+    enable_parallel: bool = True  # honoured by BatchProcessor.enable_parallel
 
     # File settings
     last_content_dir: str = ""
@@ -60,7 +60,9 @@ class ColorCastConfig:
         with open(path, "r") as f:
             data = json.load(f)
 
-        return cls(**data)
+        known_fields = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in known_fields}
+        return cls(**filtered)
 
     def get_config_path(self) -> Path:
         """
