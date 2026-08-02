@@ -2,8 +2,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Code Coverage](https://img.shields.io/badge/coverage-69%25-green.svg)](tests/)
-[![Tests](https://img.shields.io/badge/tests-345%20passed-brightgreen.svg)](tests/)
+[![CI](https://github.com/MichailSemoglou/ColorCast/actions/workflows/ci.yml/badge.svg)](https://github.com/MichailSemoglou/ColorCast/actions/workflows/ci.yml)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18550038.svg)](https://doi.org/10.5281/zenodo.18550038)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/colorcast?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/colorcast)
 
@@ -18,7 +17,7 @@
 - **Selective Regional Transfer** - Target shadows, midtones, or highlights specifically
 - **Modular Package** - Use as Python API or run GUI/CLI
 - **Performance Optimized** - LRU caching and batch processing support
-- **Tested** - 69% test coverage with 345 passing tests
+- **Tested** - 75% test coverage with 359 passing tests
 - **Documented** - API documentation and examples
 - **Plugin Architecture** - Easy to add custom transfer methods
 
@@ -43,6 +42,18 @@ _The ColorCast interface: content image, style image, and result panels_
 ![ColorCast Daltonize (P) mode](imgs/interface_2.png)
 
 _Daltonize (P) mode correcting an image for protanopia, with correction intensity control_
+
+![CVD Accessibility Dashboard](imgs/CVD-Accessibility-Dashboard.png)
+
+_CVD Accessibility Dashboard: side-by-side simulations and error maps for all three deficiency types_
+
+![Compare Transfer Methods](imgs/Compare-Transfer-Methods.png)
+
+_Method comparison: ranked results across multiple metrics and transfer algorithms_
+
+![Dashboard Report](imgs/dashboard_report.png)
+
+_Full dashboard report summarizing simulation results and Daltonization efficacy_
 
 ## Installation
 
@@ -106,8 +117,6 @@ Or use the package entry point:
 ```bash
 python -m colorcast
 ```
-
-The root `colorcast.py` script is kept as a deprecated compatibility shim and also launches the GUI. Use `python -m colorcast` or `colorcast-gui` for new work.
 
 **Step-by-step:**
 
@@ -258,10 +267,10 @@ if processor.failed_files:
 #### Using Caching
 
 ```python
-from colorcast.processing.cache import LRUCache
+from colorcast.processing.cache import StyleTransferCache
 
 # Create cache
-cache = LRUCache(max_size=100)
+cache = StyleTransferCache(max_size=100)
 
 # Use cache for expensive operations
 result = cache.get_or_compute(
@@ -321,9 +330,9 @@ pytest tests/test_transfer_methods.py
 pytest -v
 ```
 
-**Test Coverage:** 69% (345 passing tests, 1 skipped)
+**Test Coverage:** 75% (359 passing, 1 skipped)
 
-- Core transfer methods: 99% coverage
+- Core transfer methods: 100% coverage
 - Full test suite including integration, performance, and property-based tests
 - Property-based tests require the optional `hypothesis` dependency
 
@@ -369,11 +378,10 @@ result_lab = ((source_lab - μ_source) × (σ_ref / σ_source)) + μ_ref
 
 **5. Selective Color Transfer**
 
-```python
-luminance = 0.299R + 0.587G + 0.114B
-mask = (luminance >= shadow_threshold) & (luminance <= highlight_threshold)
-result = source × (1 - mask) + matched × mask
-```
+A smoothstep mask feathered over a ±0.05 luminance band blends the
+matched result into the source only within the targeted tonal range
+(shadows, midtones, or highlights), producing a seamless transition
+without hard edges.
 
 - Region-based masking using luminance
 - Precise tonal range targeting
@@ -388,14 +396,11 @@ result = source × (1 - mask) + matched × mask
 
 ## Use Cases
 
-ColorCast is perfect for:
-
-- **Film Color Grading** - Matching scenes shot at different times
-- **Photography** - Applying vintage or cinematic looks
-- **Art Creation** - Transferring painting styles to photos
-- **Social Media Content** - Creating consistent color themes
-- **Game Development** - Style transfer for game assets
-- **Research** - Academic research in color transfer
+- Film color grading across different shooting conditions
+- Photography: applying vintage or cinematic looks
+- Style transfer for game assets and art creation
+- Consistent color themes for social media content
+- Academic research in color transfer
 
 ## Contributing
 
@@ -417,13 +422,31 @@ pip install -e ".[dev]"
 pytest
 
 # Run linting
-black colorcast/
-isort colorcast/
-mypy colorcast/
+black colorcast/ tests/
+isort colorcast/ tests/
+ruff check colorcast/ tests/
 
 # Run type checking
 mypy colorcast/
 ```
+
+## Citing ColorCast
+
+If you use ColorCast in academic work, please cite it as:
+
+```bibtex
+@software{Semoglou_ColorCast,
+  author    = {Semoglou, Michail},
+  title     = {ColorCast: Color Transfer Toolkit for Python},
+  doi       = {10.5281/zenodo.18550038},
+  url       = {https://github.com/MichailSemoglou/ColorCast},
+  version   = {2.5.0},
+  year      = {2026},
+}
+```
+
+A `CITATION.cff` file is included in the repository for GitHub's citation
+tooling.
 
 ## License
 
