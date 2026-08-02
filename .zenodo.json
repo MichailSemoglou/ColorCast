@@ -32,6 +32,11 @@
       "identifier": "10.5281/zenodo.18550038",
       "relation": "isVersionOf",
       "scheme": "doi"
+    },
+    {
+      "identifier": "10.5281/zenodo.21757358",
+      "relation": "isIdenticalTo",
+      "scheme": "doi"
     }
   ],
   "references": [],
