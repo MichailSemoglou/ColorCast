@@ -1,7 +1,7 @@
 """Tests for Lab color space transfer method."""
 
 import numpy as np
-import pytest
+
 from colorcast.processing.transfer_methods import color_transfer_lab
 
 

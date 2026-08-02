@@ -29,11 +29,6 @@
       "scheme": "url"
     },
     {
-      "identifier": "10.5281/zenodo.21617388",
-      "relation": "isIdenticalTo",
-      "scheme": "doi"
-    },
-    {
       "identifier": "10.5281/zenodo.18550038",
       "relation": "isVersionOf",
       "scheme": "doi"
@@ -41,6 +36,6 @@
   ],
   "references": [],
   "communities": [],
-  "version": "2.4.2",
+  "version": "2.5.0",
   "language": "eng"
 }

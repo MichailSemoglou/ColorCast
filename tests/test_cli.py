@@ -6,17 +6,17 @@ cmd_batch, cmd_list_methods, cmd_info, main) rather than through subprocess.
 
 import argparse
 import sys
-import numpy as np
-import pytest
 from unittest import mock
 
+import numpy as np
+import pytest
+
 from colorcast.__main__ import (
-    parse_args,
-    cmd_transfer,
-    cmd_batch,
-    cmd_list_methods,
     cmd_info,
+    cmd_list_methods,
+    cmd_transfer,
     main,
+    parse_args,
 )
 from colorcast.processing.image_loader import ALLOWED_IMAGE_EXTENSIONS
 
@@ -24,6 +24,7 @@ from colorcast.processing.image_loader import ALLOWED_IMAGE_EXTENSIONS
 def _make_args(**overrides):
     """Build an argparse.Namespace with sensisible defaults."""
     import pathlib
+
     defaults = {
         "command": "transfer",
         "content": pathlib.Path("fake_content.jpg"),
@@ -53,7 +54,16 @@ class TestParseArgs:
             assert args.method == "histogram"
 
     def test_transfer_command_with_method(self):
-        argv = ["colorcast", "transfer", "content.jpg", "style.jpg", "-o", "output.jpg", "-m", "meanstd"]
+        argv = [
+            "colorcast",
+            "transfer",
+            "content.jpg",
+            "style.jpg",
+            "-o",
+            "output.jpg",
+            "-m",
+            "meanstd",
+        ]
         with mock.patch.object(sys, "argv", argv):
             args = parse_args()
             assert args.command == "transfer"
@@ -94,6 +104,7 @@ class TestCmdTransfer:
         output_path = tmp_path / "output.png"
 
         import imageio.v3 as iio
+
         iio.imwrite(str(content_path), (source * 255).astype(np.uint8))
 
         args = _make_args(
@@ -115,6 +126,7 @@ class TestCmdTransfer:
         output_path = tmp_path / "output.png"
 
         import imageio.v3 as iio
+
         iio.imwrite(str(content_path), (source * 255).astype(np.uint8))
         iio.imwrite(str(style_path), (reference * 255).astype(np.uint8))
 
@@ -137,6 +149,7 @@ class TestCmdTransfer:
         output_path = tmp_path / "output.png"
 
         import imageio.v3 as iio
+
         iio.imwrite(str(content_path), (source * 255).astype(np.uint8))
         iio.imwrite(str(style_path), (reference * 255).astype(np.uint8))
 
@@ -157,6 +170,7 @@ class TestCmdTransfer:
         output_path = tmp_path / "output.png"
 
         import imageio.v3 as iio
+
         iio.imwrite(str(content_path), (source * 255).astype(np.uint8))
 
         args = _make_args(
@@ -177,6 +191,7 @@ class TestCmdTransfer:
         output_path = tmp_path / "subdir" / "nested" / "output.png"
 
         import imageio.v3 as iio
+
         iio.imwrite(str(content_path), (source * 255).astype(np.uint8))
         iio.imwrite(str(style_path), (reference * 255).astype(np.uint8))
 
@@ -246,9 +261,8 @@ class TestMain:
 
     def test_main_unknown_command_exits(self):
         argv = ["colorcast", "bogus-command"]
-        with mock.patch.object(sys, "argv", argv):
-            with pytest.raises(SystemExit):
-                main()
+        with mock.patch.object(sys, "argv", argv), pytest.raises(SystemExit):
+            main()
 
     def test_main_transfer_simulate(self, tmp_path, capsys):
         source = np.random.rand(50, 50, 3).astype(np.float32)
@@ -256,13 +270,17 @@ class TestMain:
         output_path = tmp_path / "output.png"
 
         import imageio.v3 as iio
+
         iio.imwrite(str(content_path), (source * 255).astype(np.uint8))
 
         argv = [
-            "colorcast", "transfer",
+            "colorcast",
+            "transfer",
             str(content_path),
-            "-o", str(output_path),
-            "-m", "simulate_protanopia",
+            "-o",
+            str(output_path),
+            "-m",
+            "simulate_protanopia",
         ]
         with mock.patch.object(sys, "argv", argv):
             main()

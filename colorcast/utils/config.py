@@ -1,9 +1,12 @@
 """Configuration management for ColorCast."""
 
+from __future__ import annotations
+
 import json
+import os
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Dict, Any
-from dataclasses import dataclass, asdict, fields, field
+from typing import Any
 
 
 @dataclass
@@ -22,7 +25,6 @@ class ColorCastConfig:
 
     # Performance settings
     max_image_dimension: int = 4096
-    cache_size: int = 3  # informational (global registry owns its own sizing)
     enable_parallel: bool = True  # honoured by BatchProcessor.enable_parallel
 
     # File settings
@@ -31,46 +33,99 @@ class ColorCastConfig:
     output_format: str = "png"
 
     # Custom transfer methods (plugins)
-    custom_methods: Dict[str, Any] = field(default_factory=dict)
+    custom_methods: dict[str, Any] = field(default_factory=dict)
 
-    def save(self, path: Path) -> None:
+    @staticmethod
+    def get_config_path() -> Path:
         """
-        Save configuration to file.
+        Return the default configuration file path.
+
+        Platform convention for user config directories:
+        - macOS: ``~/Library/Application Support/ColorCast/config.json``
+        - Linux: ``~/.config/ColorCast/config.json``
+        - Windows: ``%APPDATA%/ColorCast/config.json``
+        """
+        import sys
+
+        if sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support"
+        elif sys.platform == "win32":
+            base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        else:
+            base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        return base / "ColorCast" / "config.json"
+
+    def save(self, path: str | Path | None = None) -> Path:
+        """
+        Serialize the current configuration to a JSON file.
 
         Args:
-            path: Path to save configuration file
+            path: File path.  When None, ``get_config_path()`` is used.
+
+        Returns:
+            The resolved path that was written.
+
+        Raises:
+            OSError: If the parent directory cannot be created.
         """
-        with open(path, "w") as f:
-            json.dump(asdict(self), f, indent=2)
+        resolved = Path(path) if path is not None else self.get_config_path()
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        data = {f.name: getattr(self, f.name) for f in fields(self)}
+        resolved.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+        return resolved
 
     @classmethod
-    def load(cls, path: Path) -> "ColorCastConfig":
+    def load(cls, path: str | Path | None = None) -> ColorCastConfig:
         """
-        Load configuration from file.
+        Load configuration from a JSON file, falling back to defaults.
+
+        Unknown keys in the file are silently ignored.  Values for known
+        fields are validated against their declared types; a
+        :class:`TypeError` is raised on mismatch (e.g. ``window_width:
+        "abc"`` where ``window_width`` is an ``int`` field).
 
         Args:
-            path: Path to configuration file
+            path: File path.  When None, ``get_config_path()`` is used.
 
         Returns:
-            ColorCastConfig instance
+            A ``ColorCastConfig`` populated from the file, with defaults
+            for any field not present.
+
+        Raises:
+            TypeError: If a known field has an incompatible value type.
+            FileNotFoundError: If the file does not exist (surfaced
+                directly for callers to handle).
         """
-        if not path.exists():
-            return cls()
+        from typing import Any, get_origin, get_type_hints
 
-        with open(path, "r") as f:
-            data = json.load(f)
-
-        known_fields = {f.name for f in fields(cls)}
-        filtered = {k: v for k, v in data.items() if k in known_fields}
+        resolved = Path(path) if path is not None else cls.get_config_path()
+        raw = json.loads(resolved.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise TypeError(f"Expected a JSON object in {resolved}, " f"got {type(raw).__name__}")
+        known_fields = {f.name: f for f in fields(cls)}
+        field_types = get_type_hints(cls)
+        filtered: dict[str, Any] = {}
+        for key, value in raw.items():
+            if key not in known_fields:
+                continue
+            expected = field_types.get(key, Any)
+            if expected is Any:
+                filtered[key] = value
+                continue
+            origin = get_origin(expected) or expected
+            if origin is int and isinstance(value, bool):
+                raise TypeError(
+                    f"{key}: expected {origin.__name__}, " f"got {type(value).__name__} ({value!r})"
+                )
+            if origin is float and isinstance(value, int) and not isinstance(value, bool):
+                filtered[key] = float(value)
+                continue
+            if not isinstance(value, origin):
+                raise TypeError(
+                    f"{key}: expected {origin.__name__}, " f"got {type(value).__name__} ({value!r})"
+                )
+            filtered[key] = value
         return cls(**filtered)
 
-    def get_config_path(self) -> Path:
-        """
-        Get default configuration file path.
 
-        Returns:
-            Path to default configuration file
-        """
-        config_dir = Path.home() / ".colorcast"
-        config_dir.mkdir(exist_ok=True)
-        return config_dir / "config.json"
+__all__ = ["ColorCastConfig"]

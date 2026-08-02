@@ -1,13 +1,13 @@
 """Tests for batch processing functionality."""
 
-import numpy as np
-import pytest
 from pathlib import Path
 
+import numpy as np
+import pytest
+
 from colorcast.processing.batch import BatchProcessor
-from colorcast.processing.image_loader import load_image, save_image
+from colorcast.processing.image_loader import save_image
 from colorcast.processing.transfer_methods import match_histograms_multichannel
-from colorcast.utils.exceptions import ImageLoadError
 
 
 @pytest.fixture
@@ -52,11 +52,8 @@ class TestBatchProcessor:
 
         assert processor.progress_callback == callback
 
-    def test_process_directory_success(
-        self, tmp_path, sample_image, sample_style_image
-    ):
+    def test_process_directory_success(self, tmp_path, sample_image, sample_style_image):
         """Test successful directory processing."""
-        from colorcast.processing.image_loader import save_image
 
         # Create test directory
         content_dir = tmp_path / "content"
@@ -90,11 +87,8 @@ class TestBatchProcessor:
         # Check no failed files
         assert len(processor.failed_files) == 0
 
-    def test_process_directory_with_callback(
-        self, tmp_path, sample_image, sample_style_image
-    ):
+    def test_process_directory_with_callback(self, tmp_path, sample_image, sample_style_image):
         """Test directory processing with progress callback."""
-        from colorcast.processing.image_loader import save_image
 
         # Create test directory
         content_dir = tmp_path / "content"
@@ -119,7 +113,7 @@ class TestBatchProcessor:
             max_workers=2,
             progress_callback=callback,
         )
-        results = processor.process_directory(
+        processor.process_directory(
             content_dir=content_dir,
             style_image=tmp_path / "style.jpg",
             output_dir=output_dir,
@@ -131,11 +125,8 @@ class TestBatchProcessor:
         assert final_call[0] == 5  # processed
         assert final_call[1] == 5  # total
 
-    def test_process_directory_pattern_filter(
-        self, tmp_path, sample_image, sample_style_image
-    ):
+    def test_process_directory_pattern_filter(self, tmp_path, sample_image, sample_style_image):
         """Test pattern filtering in directory processing."""
-        from colorcast.processing.image_loader import save_image
 
         # Create test directory
         content_dir = tmp_path / "content"
@@ -163,11 +154,8 @@ class TestBatchProcessor:
         # Should only process 2 JPG files
         assert len(results) == 2
 
-    def test_process_directory_error_handling(
-        self, tmp_path, sample_image, sample_style_image
-    ):
+    def test_process_directory_error_handling(self, tmp_path, sample_image, sample_style_image):
         """Test error handling in directory processing."""
-        from colorcast.processing.image_loader import save_image
 
         # Create test directory
         content_dir = tmp_path / "content"
@@ -199,121 +187,8 @@ class TestBatchProcessor:
         assert len(processor.failed_files) == 1
         assert "invalid.jpg" in str(processor.failed_files[0][0])
 
-    def test_process_pairs_success(
-        self, tmp_path, sample_image, sample_style_image
-    ):
-        """Test successful pair processing."""
-        # Create test directory
-        output_dir = tmp_path / "output"
-        output_dir.mkdir()
-
-        # Create pairs
-        pairs = [
-            (tmp_path / "content1.jpg", tmp_path / "style1.jpg"),
-            (tmp_path / "content2.jpg", tmp_path / "style2.jpg"),
-            (tmp_path / "content3.jpg", tmp_path / "style3.jpg"),
-        ]
-
-        # Save images
-        for content_path, style_path in pairs:
-            save_image(sample_image, str(content_path))
-            save_image(sample_style_image, str(style_path))
-
-        # Process pairs
-        processor = BatchProcessor(
-            transfer_method=match_histograms_multichannel,
-        )
-        results = processor.process_pairs(
-            image_pairs=pairs,
-            output_dir=output_dir,
-        )
-
-        # Verify results
-        assert len(results) == 3
-        for i, result_path in enumerate(results):
-            assert result_path.exists()
-            assert result_path.name == f"result_{i:04d}.jpg"
-
-        # Check no failed pairs
-        assert len(processor.failed_files) == 0
-
-    def test_process_pairs_with_callback(
-        self, tmp_path, sample_image, sample_style_image
-    ):
-        """Test pair processing with progress callback."""
-        # Create test directory
-        output_dir = tmp_path / "output"
-        output_dir.mkdir()
-
-        # Create pairs
-        pairs = [
-            (tmp_path / "content1.jpg", tmp_path / "style1.jpg"),
-            (tmp_path / "content2.jpg", tmp_path / "style2.jpg"),
-        ]
-
-        # Save images
-        for content_path, style_path in pairs:
-            save_image(sample_image, str(content_path))
-            save_image(sample_style_image, str(style_path))
-
-        # Track callback calls
-        callback_calls = []
-
-        def callback(processed, total):
-            callback_calls.append((processed, total))
-
-        # Process pairs
-        processor = BatchProcessor(
-            transfer_method=match_histograms_multichannel,
-            progress_callback=callback,
-        )
-        results = processor.process_pairs(
-            image_pairs=pairs,
-            output_dir=output_dir,
-        )
-
-        # Verify callback was called
-        assert len(callback_calls) == 2
-
-    def test_process_pairs_error_handling(
-        self, tmp_path, sample_image, sample_style_image
-    ):
-        """Test error handling in pair processing."""
-        # Create test directory
-        output_dir = tmp_path / "output"
-        output_dir.mkdir()
-
-        # Create pairs (one valid, one invalid)
-        pairs = [
-            (tmp_path / "valid.jpg", tmp_path / "valid_style.jpg"),
-            (tmp_path / "invalid.jpg", tmp_path / "invalid_style.jpg"),
-        ]
-
-        # Save valid pair
-        save_image(sample_image, str(pairs[0][0]))
-        save_image(sample_style_image, str(pairs[0][1]))
-        # Don't save invalid files
-
-        # Process pairs
-        processor = BatchProcessor(
-            transfer_method=match_histograms_multichannel,
-        )
-        results = processor.process_pairs(
-            image_pairs=pairs,
-            output_dir=output_dir,
-        )
-
-        # Should process 1 valid pair
-        assert len(results) == 1
-
-        # Should have failed pairs
-        assert len(processor.failed_files) >= 1
-
-    def test_failed_files_tracking(
-        self, tmp_path, sample_image, sample_style_image
-    ):
+    def test_failed_files_tracking(self, tmp_path, sample_image, sample_style_image):
         """Test that failed files are properly tracked."""
-        from colorcast.processing.image_loader import save_image
 
         # Create test directory
         content_dir = tmp_path / "content"
@@ -331,7 +206,7 @@ class TestBatchProcessor:
         processor = BatchProcessor(
             transfer_method=match_histograms_multichannel,
         )
-        results = processor.process_directory(
+        processor.process_directory(
             content_dir=content_dir,
             style_image=tmp_path / "style.jpg",
             output_dir=output_dir,

@@ -1,16 +1,17 @@
 """Performance benchmarks for ColorCast transfer methods."""
 
 import time
+
 import numpy as np
 import pytest
 
 from colorcast import (
-    match_histograms_multichannel,
     color_transfer_meanstd,
     lut_transfer_with_curve,
+    match_histograms_multichannel,
     selective_color_transfer,
 )
-from colorcast.processing.cache import LRUCache
+from colorcast.processing.cache import StyleTransferCache
 
 
 @pytest.fixture
@@ -141,49 +142,41 @@ class TestCachePerformance:
 
     def test_cache_hit_small(self, small_image, style_image, benchmark):
         """Benchmark cache hit on small image."""
-        cache = LRUCache(max_size=10)
+        cache = StyleTransferCache(max_size=10)
 
         # Pre-fill cache
         cache.get_or_compute(
             key="test",
-            compute_func=lambda: match_histograms_multichannel(
-                small_image, style_image
-            ),
+            compute_func=lambda: match_histograms_multichannel(small_image, style_image),
         )
 
         # Benchmark cache hit
         benchmark(
             cache.get_or_compute,
             key="test",
-            compute_func=lambda: match_histograms_multichannel(
-                small_image, style_image
-            ),
+            compute_func=lambda: match_histograms_multichannel(small_image, style_image),
         )
 
     def test_cache_miss_small(self, small_image, style_image, benchmark):
         """Benchmark cache miss on small image."""
-        cache = LRUCache(max_size=10)
+        cache = StyleTransferCache(max_size=10)
 
         # Benchmark cache miss
         benchmark(
             cache.get_or_compute,
             key="test",
-            compute_func=lambda: match_histograms_multichannel(
-                small_image, style_image
-            ),
+            compute_func=lambda: match_histograms_multichannel(small_image, style_image),
         )
 
     def test_cache_effectiveness(self, medium_image, style_image):
         """Measure cache effectiveness."""
-        cache = LRUCache(max_size=5)
+        cache = StyleTransferCache(max_size=5)
 
         # First access - miss
         start = time.time()
         result1 = cache.get_or_compute(
             key="test1",
-            compute_func=lambda: match_histograms_multichannel(
-                medium_image, style_image
-            ),
+            compute_func=lambda: match_histograms_multichannel(medium_image, style_image),
         )
         time_miss = time.time() - start
 
@@ -191,9 +184,7 @@ class TestCachePerformance:
         start = time.time()
         result2 = cache.get_or_compute(
             key="test1",
-            compute_func=lambda: match_histograms_multichannel(
-                medium_image, style_image
-            ),
+            compute_func=lambda: match_histograms_multichannel(medium_image, style_image),
         )
         time_hit = time.time() - start
 
@@ -227,12 +218,14 @@ class TestScalingPerformance:
         scaling = times["medium"] / times["small"]
         assert 1.2 < scaling < 10, f"Unexpected scaling: {scaling:.2f}x"
 
-    @pytest.mark.skip(reason="Micro-benchmarks with time.time() are unreliable; use pytest-benchmark instead")
+    @pytest.mark.skip(
+        reason="Micro-benchmarks with time.time() are unreliable; use pytest-benchmark instead"
+    )
     def test_mean_std_scaling(self, small_image, medium_image, style_image):
         """Test performance scaling for mean/std transfer."""
         # Warmup run to initialize NumPy/caches
         color_transfer_meanstd(small_image, style_image)
-        
+
         times = {}
 
         for name, img in [("small", small_image), ("medium", medium_image)]:
@@ -263,7 +256,7 @@ class TestMemoryPerformance:
         import gc
 
         # Perform many operations
-        for i in range(10):
+        for _i in range(10):
             result = match_histograms_multichannel(medium_image, style_image)
             assert result.shape == medium_image.shape
 

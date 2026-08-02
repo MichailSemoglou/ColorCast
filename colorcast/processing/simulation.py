@@ -50,9 +50,11 @@ References
 
 from __future__ import annotations
 
-from typing import Callable, ClassVar, Literal, get_args
+from collections.abc import Callable
+from typing import ClassVar, Literal, get_args
 
 import numpy as np
+
 from colorcast.processing.image_loader import normalize_to_float32
 
 # Type alias used in public method signatures. This Literal is the single
@@ -180,9 +182,7 @@ class ColorBlindSimulator:
     # single linear-RGB projection matrix or a callable that transforms an
     # (N, 3) linear-RGB array. A new deficiency needs one entry here plus its
     # name in DeficiencyType.
-    _PROJECTION: ClassVar[
-        dict[str, np.ndarray | Callable[[np.ndarray], np.ndarray]]
-    ] = {
+    _PROJECTION: ClassVar[dict[str, np.ndarray | Callable[[np.ndarray], np.ndarray]]] = {
         "protanopia": _PROTAN_RGB,
         "deuteranopia": _DEUTAN_RGB,
         "tritanopia": _tritan_projection,

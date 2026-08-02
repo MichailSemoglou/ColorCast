@@ -92,7 +92,9 @@ class TestColorBlindSimulator:
         for neutral in [white, gray]:
             simulated = simulator.transform_color_space(neutral, deficiency)
             np.testing.assert_allclose(
-                simulated, neutral, atol=1e-5,
+                simulated,
+                neutral,
+                atol=1e-5,
                 err_msg=f"{deficiency} does not preserve achromatic input",
             )
 
@@ -147,6 +149,36 @@ class TestErrorMap:
 
         assert np.all(error_map.chroma_error >= 0.0)
         assert np.all(error_map.absolute >= 0.0)
+
+    def test_compute_dE00_optional_output(self, rgb_image):
+        simulator = ColorBlindSimulator()
+        simulated = simulator.transform_color_space(rgb_image, "deuteranopia")
+
+        error_map_default = get_error_map(rgb_image, simulated)
+        error_map_enabled = get_error_map(rgb_image, simulated, compute_dE00=True)
+
+        assert error_map_default.chroma_error_dE00 is None
+        assert error_map_enabled.chroma_error_dE00.shape == rgb_image.shape[:2]
+        assert error_map_enabled.chroma_error_dE00.dtype == np.float32
+        assert np.isfinite(error_map_enabled.chroma_error_dE00).all()
+        assert np.all(error_map_enabled.chroma_error_dE00 >= 0.0)
+
+        identical = np.array([[[0.2, 0.1, 0.3]]], dtype=np.float32)
+        identical_error_map = get_error_map(identical, identical, compute_dE00=True)
+        np.testing.assert_array_equal(
+            identical_error_map.chroma_error_dE00, np.zeros((1, 1), dtype=np.float32)
+        )
+
+        original = np.array([[[0.2, 0.1, 0.3]]], dtype=np.float32)
+        simulated_pair = np.array([[[0.8, 0.2, 0.1]]], dtype=np.float32)
+        orig_lab = skcolor.rgb2lab(original)
+        sim_lab = skcolor.rgb2lab(simulated_pair)
+        orig_lab[:, :, 0] = 50.0
+        sim_lab[:, :, 0] = 50.0
+        expected = skcolor.deltaE_ciede2000(orig_lab, sim_lab).astype(np.float32)
+
+        pair_error_map = get_error_map(original, simulated_pair, compute_dE00=True)
+        np.testing.assert_allclose(pair_error_map.chroma_error_dE00, expected, rtol=1e-5, atol=1e-5)
 
     def test_shape_mismatch_raises(self, rgb_image):
         other = np.random.rand(16, 16, 3).astype(np.float32)
@@ -203,6 +235,10 @@ class TestDaltonization:
         assert np.all(result >= 0.0)
         assert np.all(result <= 1.0)
         assert np.all(np.isfinite(result))
+
+    def test_daltonize_zero_intensity_unknown_deficiency_raises(self, rgb_image):
+        with pytest.raises(ValueError, match="Unknown deficiency type"):
+            daltonize(rgb_image, "achromatopsia", intensity=0.0)
 
     def test_daltonize_unknown_deficiency_raises(self, rgb_image):
         with pytest.raises(ValueError, match="Unknown deficiency type"):

@@ -1,7 +1,7 @@
 """Tests for image blending."""
 
-import pytest
 import numpy as np
+
 from colorcast.processing.blending import blend_images
 
 

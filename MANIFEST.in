@@ -3,8 +3,7 @@ include README.md
 include LICENSE
 include CITATION.cff
 include CHANGELOG.md
-include requirements.txt
-include requirements-dev.txt
+include SECURITY.md
 
 # Include configuration files
 include pyproject.toml
@@ -14,6 +13,9 @@ recursive-include docs *.rst *.py
 
 # Include tests
 recursive-include tests *.py
+
+# Include reference images (for README screenshots)
+graft imgs
 
 # Exclude unnecessary files
 global-exclude __pycache__

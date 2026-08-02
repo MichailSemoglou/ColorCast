@@ -2,8 +2,8 @@
 
 import threading
 
-import pytest
 import numpy as np
+
 from colorcast.processing.cache import StyleTransferCache
 
 
@@ -47,7 +47,7 @@ class TestStyleTransferCache:
         cache = StyleTransferCache(max_size=3)
 
         # Add 3 items
-        for i in range(3):
+        for _i in range(3):
             content = np.random.rand(100, 100, 3)
             style = np.random.rand(100, 100, 3)
             styled = np.random.rand(100, 100, 3)
@@ -95,6 +95,82 @@ class TestStyleTransferCache:
 
         cache.clear()
         assert cache.size() == 0
+
+    def test_cache_clear_resets_stats(self):
+        """Test cache clearing resets stored entries and counters."""
+        cache = StyleTransferCache(max_size=5)
+
+        content = np.random.rand(50, 50, 3)
+        style = np.random.rand(50, 50, 3)
+        styled = np.random.rand(50, 50, 3)
+
+        cache.set(content, style, "histogram", styled)
+        cache.get(content, style, "histogram")
+        cache.get(content, style, "meanstd")
+
+        assert cache.size() == 1
+        assert cache.stats()["hits"] == 1
+        assert cache.stats()["misses"] == 1
+
+        cache.clear()
+
+        assert cache.size() == 0
+        assert cache.stats()["hits"] == 0
+        assert cache.stats()["misses"] == 0
+
+    def test_generate_key_matches_internal_derivation(self):
+        """The public helper should mirror the internal key derivation."""
+        cache = StyleTransferCache(max_size=5)
+
+        content = np.zeros((4, 4, 3), dtype=np.float32)
+        style = np.ones((4, 4, 3), dtype=np.float32)
+        params = {"shadow_threshold": 0.3}
+
+        expected = cache._generate_key(
+            cache._compute_hash(content),
+            cache._style_hash(style),
+            "histogram",
+            params,
+        )
+        expected_without_params = cache._generate_key(
+            cache._compute_hash(content),
+            cache._style_hash(style),
+            "histogram",
+            {},
+        )
+
+        assert cache.generate_key(content, style, "histogram", params) == expected
+        assert cache.generate_key(content, style, "histogram") == expected_without_params
+
+    def test_generate_key_changes_for_any_pixel_change(self):
+        """Any pixel change should produce a different cache key."""
+        cache = StyleTransferCache(max_size=5)
+
+        style = np.zeros((256, 256, 3), dtype=np.float32)
+        content = np.zeros((256, 256, 3), dtype=np.float32)
+        modified_content = content.copy()
+        modified_content[5, 5, :] = 1.0
+
+        assert cache.generate_key(content, style, "histogram") != cache.generate_key(
+            modified_content,
+            style,
+            "histogram",
+        )
+
+    def test_compute_hash_handles_contiguous_sliced_and_transposed_arrays(self):
+        """Hashing should work for contiguous, sliced, and transposed arrays."""
+        cache = StyleTransferCache(max_size=5)
+        base = np.arange(24, dtype=np.float32).reshape(2, 3, 4)
+
+        contiguous_hash = cache._compute_hash(base)
+        sliced_hash = cache._compute_hash(base[:, :2, :])
+        transposed_hash = cache._compute_hash(np.transpose(base, (1, 0, 2)))
+
+        assert contiguous_hash
+        assert sliced_hash
+        assert transposed_hash
+        assert contiguous_hash != sliced_hash
+        assert contiguous_hash != transposed_hash
 
     def test_cache_with_parameters(self):
         """Test caching with method parameters."""

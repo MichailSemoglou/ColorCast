@@ -1,8 +1,10 @@
 """Tests for ColorCastConfig configuration management."""
 
 import json
-import pytest
 from pathlib import Path
+
+import pytest
+
 from colorcast.utils.config import ColorCastConfig
 
 
@@ -37,10 +39,6 @@ class TestColorCastConfigDefaults:
         cfg = ColorCastConfig()
         assert cfg.max_image_dimension == 4096
 
-    def test_default_cache_size(self):
-        cfg = ColorCastConfig()
-        assert cfg.cache_size == 3
-
     def test_default_enable_parallel(self):
         cfg = ColorCastConfig()
         assert cfg.enable_parallel is True
@@ -54,84 +52,62 @@ class TestColorCastConfigDefaults:
         assert cfg.custom_methods == {}
 
 
-class TestColorCastConfigSaveLoad:
-    """Tests for save and load roundtrips."""
+class TestColorCastConfigPersistence:
+    """Tests for save/load round-trip and validation."""
 
-    def test_save_and_load_roundtrip(self, tmp_path):
-        cfg = ColorCastConfig(window_width=800, window_height=600)
-        path = tmp_path / "config.json"
-        cfg.save(path)
-
+    def test_save_and_load_roundtrip(self, tmp_path: Path):
+        cfg = ColorCastConfig(window_width=1920, default_method="meanstd")
+        path = cfg.save(tmp_path / "config.json")
         loaded = ColorCastConfig.load(path)
-        assert loaded.window_width == 800
-        assert loaded.window_height == 600
-
-    def test_load_missing_file_returns_defaults(self, tmp_path):
-        path = tmp_path / "nonexistent.json"
-        cfg = ColorCastConfig.load(path)
-        assert isinstance(cfg, ColorCastConfig)
-        assert cfg.window_width == 1000
-
-    def test_save_produces_valid_json(self, tmp_path):
-        cfg = ColorCastConfig()
-        path = tmp_path / "config.json"
-        cfg.save(path)
-
-        with open(path, "r") as f:
-            data = json.load(f)
-        assert json.loads(json.dumps(data)) == data
-
-    def test_save_preserves_all_fields(self, tmp_path):
-        cfg = ColorCastConfig(
-            window_width=1024,
-            default_method="meanstd",
-            default_intensity=0.5,
-            cache_size=10,
-        )
-        path = tmp_path / "config.json"
-        cfg.save(path)
-
-        loaded = ColorCastConfig.load(path)
-        assert loaded.window_width == 1024
+        assert loaded.window_width == 1920
         assert loaded.default_method == "meanstd"
-        assert loaded.default_intensity == pytest.approx(0.5)
-        assert loaded.cache_size == 10
+        assert loaded.window_height == 700  # unmodified default
 
-    def test_load_filters_unknown_keys(self, tmp_path):
+    def test_save_creates_parent_directories(self, tmp_path: Path):
+        cfg = ColorCastConfig()
+        path = tmp_path / "deep" / "nested" / "config.json"
+        cfg.save(path)
+        assert path.exists()
+
+    def test_load_ignores_unknown_keys(self, tmp_path: Path):
         path = tmp_path / "config.json"
         path.write_text(
-            json.dumps({"window_width": 777, "bogus_field": "intruder", "another_junk": 42})
+            json.dumps({"window_width": 800, "nonexistent_field": "should_be_ignored"}),
+            encoding="utf-8",
         )
-
         cfg = ColorCastConfig.load(path)
-        assert cfg.window_width == 777
-        assert not hasattr(cfg, "bogus_field")
+        assert cfg.window_width == 800
 
+    def test_load_raises_on_bad_type(self, tmp_path: Path):
+        path = tmp_path / "config.json"
+        path.write_text(
+            json.dumps({"window_width": "abc"}),
+            encoding="utf-8",
+        )
+        with pytest.raises(TypeError, match="window_width"):
+            ColorCastConfig.load(path)
 
-class TestColorCastConfigGetConfigPath:
-    """Tests for get_config_path."""
+    def test_load_missing_file_raises(self, tmp_path: Path):
+        with pytest.raises(FileNotFoundError):
+            ColorCastConfig.load(tmp_path / "nonexistent.json")
 
-    @pytest.fixture(autouse=True)
-    def isolate_home(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    def test_load_partial_overlay(self, tmp_path: Path):
+        path = tmp_path / "config.json"
+        path.write_text(
+            json.dumps({"window_width": 1024, "output_format": "jpg"}),
+            encoding="utf-8",
+        )
+        cfg = ColorCastConfig.load(path)
+        assert cfg.window_width == 1024
+        assert cfg.output_format == "jpg"
+        assert cfg.window_height == 700  # default
 
-    def test_returns_path_object(self):
-        cfg = ColorCastConfig()
-        path = cfg.get_config_path()
+    def test_get_config_path_returns_path(self):
+        path = ColorCastConfig.get_config_path()
         assert isinstance(path, Path)
-
-    def test_returns_expected_filename(self):
-        cfg = ColorCastConfig()
-        path = cfg.get_config_path()
         assert path.name == "config.json"
 
-    def test_returns_expected_directory(self):
+    def test_save_returns_written_path(self, tmp_path: Path):
         cfg = ColorCastConfig()
-        path = cfg.get_config_path()
-        assert path.parent.name == ".colorcast"
-
-    def test_directory_is_created(self):
-        cfg = ColorCastConfig()
-        path = cfg.get_config_path()
-        assert path.parent.exists()
-        assert path.parent.is_dir()
+        returned = cfg.save(tmp_path / "cfg.json")
+        assert returned == tmp_path / "cfg.json"

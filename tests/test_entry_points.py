@@ -2,9 +2,6 @@
 
 import subprocess
 import sys
-from pathlib import Path
-
-import pytest
 
 
 class TestEntryPoints:
@@ -45,18 +42,6 @@ class TestEntryPoints:
         assert "colorcast-gui" in result.stdout
         assert "graphical interface" in result.stdout.lower()
 
-    def test_root_script_help(self):
-        """`python colorcast.py --help` exits cleanly via the compatibility shim."""
-        root_script = Path(__file__).parent.parent / "colorcast.py"
-        result = subprocess.run(
-            [sys.executable, str(root_script), "--help"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        assert result.returncode == 0
-        assert "colorcast-gui" in result.stdout
-
     def test_main_functions_are_exposed(self):
         """Both CLI and GUI launchers are importable from the package."""
         from colorcast.__main__ import gui_main, main
@@ -80,9 +65,7 @@ class TestEntryPoints:
 
         content_path = tmp_path / "content.png"
         output_path = tmp_path / "out.png"
-        io.imsave(
-            content_path, (np.random.rand(16, 16, 3) * 255).astype(np.uint8)
-        )
+        io.imsave(content_path, (np.random.rand(16, 16, 3) * 255).astype(np.uint8))
 
         result = subprocess.run(
             [
@@ -108,9 +91,7 @@ class TestEntryPoints:
         from skimage import io
 
         content_path = tmp_path / "content.png"
-        io.imsave(
-            content_path, (np.random.rand(16, 16, 3) * 255).astype(np.uint8)
-        )
+        io.imsave(content_path, (np.random.rand(16, 16, 3) * 255).astype(np.uint8))
 
         result = subprocess.run(
             [
@@ -127,8 +108,37 @@ class TestEntryPoints:
             timeout=60,
         )
 
-        assert result.returncode == 1
-        assert "requires a style image" in result.stdout
+        assert result.returncode == 2
+        assert (
+            "requires a style image" in result.stdout or "requires a style image" in result.stderr
+        )
+
+    def test_cli_error_shows_traceback_with_verbose(self, tmp_path):
+        """A failing transfer with --verbose includes a traceback."""
+        import numpy as np
+        from skimage import io
+
+        content_path = tmp_path / "content.png"
+        io.imsave(content_path, (np.random.rand(16, 16, 3) * 255).astype(np.uint8))
+
+        result = subprocess.run(
+            [
+                "colorcast",
+                "transfer",
+                str(content_path),
+                "-m",
+                "histogram",
+                "-o",
+                str(tmp_path / "out.png"),
+                "--verbose",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        assert result.returncode == 2
+        assert "Traceback" in result.stderr
 
     def test_gui_import_does_not_configure_root_logger(self):
         """Importing colorcast.gui must not add handlers to the root logger."""

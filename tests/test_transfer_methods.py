@@ -1,11 +1,12 @@
 """Tests for color transfer methods."""
 
-import pytest
 import numpy as np
+import pytest
+
 from colorcast.processing.transfer_methods import (
-    match_histograms_multichannel,
     color_transfer_meanstd,
     lut_transfer_with_curve,
+    match_histograms_multichannel,
     selective_color_transfer,
 )
 

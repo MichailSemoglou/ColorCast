@@ -2,19 +2,17 @@
 
 import numpy as np
 import pytest
-from pathlib import Path
 
 from colorcast import (
-    load_image,
-    match_histograms_multichannel,
+    blend_images,
     color_transfer_meanstd,
     lut_transfer_with_curve,
-    selective_color_transfer,
-    blend_images,
+    match_histograms_multichannel,
     registry,
+    selective_color_transfer,
 )
 from colorcast.processing.batch import BatchProcessor
-from colorcast.processing.cache import LRUCache
+from colorcast.processing.cache import StyleTransferCache
 
 
 @pytest.fixture
@@ -53,9 +51,7 @@ class TestIntegrationWorkflow:
     def test_complete_lut_workflow(self, sample_image_rgb, sample_style_image):
         """Test complete LUT workflow with curves."""
         for curve_type in ["linear", "s-curve", "contrast"]:
-            result = lut_transfer_with_curve(
-                sample_image_rgb, sample_style_image, curve_type
-            )
+            result = lut_transfer_with_curve(sample_image_rgb, sample_style_image, curve_type)
             assert result.shape == sample_image_rgb.shape
             assert result.dtype == sample_image_rgb.dtype
             assert np.all(result >= 0) and np.all(result <= 1)
@@ -64,9 +60,7 @@ class TestIntegrationWorkflow:
         """Test complete selective transfer workflow."""
         modes = ["shadows", "midtones", "highlights", "full"]
         for mode in modes:
-            result = selective_color_transfer(
-                sample_image_rgb, sample_style_image, mode=mode
-            )
+            result = selective_color_transfer(sample_image_rgb, sample_style_image, mode=mode)
             assert result.shape == sample_image_rgb.shape
             assert result.dtype == sample_image_rgb.dtype
             assert np.all(result >= 0) and np.all(result <= 1)
@@ -96,7 +90,7 @@ class TestIntegrationWithCache:
 
     def test_cached_workflow(self, sample_image_rgb, sample_style_image):
         """Test workflow with caching enabled."""
-        cache = LRUCache(max_size=10)
+        cache = StyleTransferCache(max_size=10)
 
         # First call - should compute
         result1 = cache.get_or_compute(
@@ -132,7 +126,7 @@ class TestIntegrationWithRegistry:
         assert len(methods) > 0
 
         # Test each method via registry
-        for method_id in methods.keys():
+        for method_id in methods:
             method = registry.get_method(method_id)
             result = method.transfer(sample_image_rgb, sample_style_image)
 
@@ -144,9 +138,7 @@ class TestIntegrationWithRegistry:
 class TestBatchIntegration:
     """Test batch processing integration."""
 
-    def test_batch_directory_processing(
-        self, tmp_path, sample_image_rgb, sample_style_image
-    ):
+    def test_batch_directory_processing(self, tmp_path, sample_image_rgb, sample_style_image):
         """Test batch processing of directory."""
         from colorcast.processing.image_loader import save_image
 
@@ -158,9 +150,7 @@ class TestBatchIntegration:
 
         # Save sample images
         for i in range(3):
-            save_image(
-                sample_image_rgb, str(content_dir / f"test_{i}.jpg")
-            )
+            save_image(sample_image_rgb, str(content_dir / f"test_{i}.jpg"))
         save_image(sample_style_image, str(tmp_path / "style.jpg"))
 
         # Process batch

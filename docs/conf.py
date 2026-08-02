@@ -10,14 +10,16 @@ from pathlib import Path
 # Add the project root to the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from colorcast._version import __version__
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'ColorCast'
-copyright = '2024, ColorCast Contributors'
-author = 'ColorCast Contributors'
-release = '2.4.2'
-version = '2.4.2'
+copyright = '2025–2026, Michail Semoglou'
+author = 'Michail Semoglou'
+release = __version__
+version = __version__
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -49,7 +51,8 @@ language = 'en'
 
 html_theme = 'sphinx_rtd_theme'
 
-html_static_path = ['_static']
+# No static files yet; remove when a `_static/` directory is created
+# html_static_path = ['_static']
 
 # Custom sidebar templates
 html_sidebars = {

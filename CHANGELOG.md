@@ -1,5 +1,71 @@
 # Changelog
 
+## [2.5.0] – 2026-08-02
+
+### Added
+
+- Headless GUI smoke tests in `tests/test_gui.py` (6 tests) covering method-switch toggles the style button and apply-with-no-images warning branches, runnable with `QT_QPA_PLATFORM=offscreen`.
+- Path-containment regression tests in `tests/test_validators_enhanced.py` (5 tests) guarding against sibling-prefix bypass, path traversal, and multiple-base-directory selection in `validate_file_path`.
+- `--verbose` flag on the CLI parser and each subcommand so tracebacks on errors are opt-in and default to a one-line message; `test_cli_error_shows_traceback_with_verbose` in `tests/test_entry_points.py`.
+- GitHub Actions CI pipeline (`.github/workflows/ci.yml`): lint (black, isort, ruff), mypy type-check, and test matrix across Python 3.10–3.13 with xvfb for headless PyQt5.
+- `[tool.ruff]` configuration in `pyproject.toml` (line-length 100, target py310+, rules E/F/I/W/UP/B/SIM/C4) with per-file ignores for test files with unavoidable long hypothesis decorator lines.
+- CVD accessibility dashboard in `colorcast/analysis/dashboard.py` (`compute_dashboard`, `DashboardResult`, `generate_dashboard_report`) for comparing all three deficiencies at once, plus `_DEFICIENCIES` and `_DEFICIENCY_LABELS` constants.
+- PyPI publish GitHub Actions workflow (`.github/workflows/publish.yml`) triggered on release publish.
+- `.github/dependabot.yml` for automated dependency update PRs.
+- `.github/PULL_REQUEST_TEMPLATE.md`, `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md` — GitHub community templates.
+- `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md` — community health files.
+- Citing section and CI status badge in `README.md`.
+
+### Changed
+
+- `cmd_transfer` now builds kwargs from `method.parameters` instead of unconditionally forwarding `shadow_threshold` and `highlight_threshold` to every method, preventing signature clashes if a reference-free method tightens its `transfer()` contract.
+- `docs/index.rst` restructured: removed `quickstart`, `user_guide`, `advanced`, and `contributing` placeholder pages; source install command simplified to `pip install -e ".[dev,analysis]"`; CVD and Daltonization added to the feature list.
+- `docs/conf.py` updated with current author, copyright range, and dynamic version import.
+- `pyproject.toml` dev dependencies: dropped `pylint` and `pytest-mock`; added `imageio`.
+- `README.md` lint command updated to `ruff check`.
+- `.gitignore` excludes image files (`*.png`, `*.jpg`, etc.) except `imgs/`; `MANIFEST.in` drops `requirements.txt`/`requirements-dev.txt`, includes `SECURITY.md`, and grafts `imgs/`.
+- `main()` classifies `ValueError`, `FileNotFoundError`, `ValidationError`, and `ImageProcessingError` as exit code 2; unexpected exceptions exit with code 3. Tracebacks go to stderr and only when `--verbose` is set.
+- `--intensity` in the CLI now rejects values outside `[0, 1]` with a clear argparse error, using `validate_float_parameter` behind a custom type validator.
+- `process_pairs` and `process_single` in `batch.py` now catch `FileNotFoundError` and `OSError` alongside `ImageLoadError`, so missing files are classified as image load errors rather than "unexpected error."
+- `apply_daltonization` extracted `_compute_chromaticity_weight` and `_restore_luminance` helpers, cutting the function from ~135 to ~45 lines.
+- `colorcast/__init__.py` re-exports `ColorBlindSimulator`, `daltonize`, `get_error_map`, `ErrorMap`, and `MethodComparison`; module docstring deletes banned vocabulary ("advanced", "sophisticated") and adds mentions of colour-blindness simulation and Daltonization.
+- Version string centralized in `colorcast/_version.py`; `__init__.py`, `docs/conf.py`, and `__main__.py` import from it. `pyproject.toml` declares `dynamic = ["version"]` and reads the value from `_version.py` via `[tool.setuptools.dynamic]`, eliminating the duplicated version string.
+- `_get_image_dimensions()` reads image dimensions from PIL headers before `imread` allocates the full array, rejecting oversized images before decoding; a 200 MB byte-level file-size cap guards against decompression bombs.
+- `StyleTransferCache.get_or_compute` stores a copy of computed values so cached results are immutable snapshots; callers can no longer corrupt the cache by mutating a returned array in place.
+- `gpu_transfer.py` module docstring explains the `gpu_` prefix is historical; `gpu_histogram_matching` collapsed to its CPU body with the dead GPU→CPU round-trip removed; `gpu_lab_transfer` GPU branch documented as a placeholder.
+- CuPy import warning removed from module level; `is_gpu_available()` is the public entry point for checking accelerator presence.
+- `BatchProcessor` docstring warns against concurrent reuse of a single instance.
+- `StyleTransferApp.__init__` accepts an optional `ColorCastConfig` parameter; window size, preview size, default intensity, slider debounce, and default method now derive from config instead of hardcoded module-level constants. `gui.py` imports `ALLOWED_IMAGE_EXTENSIONS` from `validators_enhanced` and derives file-dialog filters from it.
+- `_EPSILON = 1e-8`, `_LAB_L_BOUNDS = (0, 100)`, and `_LAB_AB_BOUNDS = (-128, 127)` extracted as module-level constants in `transfer_methods.py` and imported by `gpu_transfer.py`, eliminating 6 copies each of epsilon and Lab channel bounds.
+- `TransferMethod` base class now carries `_SLIDER_SEVERITY` and `_SLIDER_CORRECTION` class constants; the 6 simulator and Daltonizer subclasses in `registry.py` reference them instead of repeating string literals.
+- All CLI functions in `__main__.py` now have return type annotations (`-> None` or `-> argparse.Namespace`); error `print()` calls route to `stderr`.
+- Remaining broad `except Exception` blocks (`gui.py:235`, `gui.py:353`, `gui.py:401`, `__main__.py:362`, `comparison.py:174`) now carry `# noqa: BLE001` with a one-line justification, matching the convention in `batch.py`.
+- `validate_and_resize_images` return annotation tightened from bare `tuple` to `tuple[np.ndarray, np.ndarray]` (`colorcast/processing/transfer_methods.py:47`).
+- README test metrics updated to match current suite output: 75% coverage, 361 passed, 1 skipped.
+
+### Fixed
+
+- `save_image` re-raises `ImageProcessingError` with `from e` so the original cause and traceback chain are preserved.
+- `show_image` in `gui.py` calls `QImage.copy()` before converting to `QPixmap` to prevent garbage-collection crashes when the backing numpy buffer goes out of scope.
+- `validate_image_file` extract `_check_extension_matches` helper and shared `_FORMAT_TO_EXT` / `_PIL_FORMAT_TO_EXT` maps eliminate the duplicate imghdr/PIL extension-check paths.
+- `MethodComparison.compare_methods` logs per-method exceptions via `logger.error(exc_info=True)` so failures are surfaced in the log even though the NaN `_error` field allows ranking to continue.
+- `ColorCastConfig.load()` now validates known configuration values against their declared types and raises `TypeError` for mismatches instead of silently accepting incompatible values.
+- `tests/test_config.py` adds 10 tests for `ColorCastConfig` default values in the 2.5.0 release notes.
+- Adjusted test expectations to match the new CLI error exit codes (`ValueError`, `FileNotFoundError`, `ValidationError`, and `ImageProcessingError` now exit with code 2).
+- `_get_image_dimensions` in `image_loader.py` no longer catches all exceptions silently: `ImportError` (PIL absent) and `OSError`/`ValueError` (header failure) fall through to full decode, and unexpected exceptions are logged at warning level.
+- `B904` violations fixed: `image_loader.py` and `validators_enhanced.py` re-raises in `except` blocks now use `raise ... from e` to preserve the cause chain.
+- `tests/test_visualization.py` adds `plt.close(fig)` after every figure creation to prevent Matplotlib handle accumulation between tests.
+- `tests/test_property_based.py` fixes dtype declarations (uses `np.float64` instead of bare `float`) to satisfy Hypothesis strict type checking.
+- `daltonize()` with `intensity=0` returned the simulated image instead of the original because `apply_daltonization` set its working base to the simulated image before the zero-intensity early-return path. Added an early return in `daltonize()` that skips simulation and error-map computation when `intensity < 1e-6`, returning the original image unchanged (`colorcast/analysis/daltonization.py:239-244`).
+
+### Removed
+
+- Dead GPU branch in `gpu_histogram_matching`: the CuPy-available path copied data GPU→CPU per channel, matched histograms with scikit-image, then copied CPU→GPU — strictly slower than the CPU fallback.
+- `ColorCastConfig.cache_size`: unused field that accepted values silently and never affected any runtime behavior.
+- Module-level `warnings.warn` in `gpu_transfer.py` that fired on every import even for users with no GPU.
+- `requirements.txt` and `requirements-dev.txt` — all dependencies are now declared in `pyproject.toml` `[project.optional-dependencies]`.
+- `colorcast.py` and `colorcast/utils/validators.py` — legacy standalone module and validation shim.
+
 ## [2.4.2] – 2026-07-27
 
 ### Added
@@ -7,7 +73,7 @@
 - 148 new tests across 6 test files, raising coverage from 51% to 69%:
   - `tests/test_curves.py` -- 13 tests for `apply_curve` (all curve types, edge cases)
   - `tests/test_gpu_transfer.py` -- 21 tests for GPU transfer CPU fallback paths across `gpu_histogram_matching`, `gpu_mean_std_transfer`, `gpu_lab_transfer`, and `gpu_histogram_matching_multichannel`
-  - `tests/test_config.py` -- 21 tests for `ColorCastConfig` save/load roundtrip, defaults, unknown-key filtering, and `get_config_path`
+  - `tests/test_config.py` -- 21 tests covering persistence and filtering for `ColorCastConfig`
   - `tests/test_comparison.py` -- 46 tests for `MethodComparison` metrics (PSNR, SSIM, color distance, histogram distance), method comparison orchestration, ranking with auto-inferred directions, report generation, `find_best_method`, and metric direction constants
   - `tests/test_visualization.py` -- 21 tests for all 4 figure-creation functions across `show_histograms` and `show_difference` parameter combinations
   - `tests/test_cli.py` -- 21 tests for `parse_args`, `cmd_transfer` (simulator, style-required, intensity blend), `cmd_batch`, `cmd_list_methods`, `cmd_info`, and `main` entry point
@@ -21,8 +87,7 @@
 - `StyleTransferCache` was not thread-safe (plain int counters and compound `OrderedDict` read-modify-write operations), though documented for use with the threaded batch path. Added a `threading.Lock` around all cache mutations.
 - `validate_file_path` used `str.startswith` to check base-directory containment, admitting `/data-leaks` when the base was `/data`. Replaced with `Path.relative_to` in a try/except block.
 - `_compute_hash` hashed the full image bytes on every cache get and set, making the LRU path slower than the transfer it was meant to cache for large images. Now hashes shape, dtype, strides, and a downsampled fingerprint instead.
-- `ColorCastConfig.load` passed every key from a user-edited `config.json` directly to `cls(**data)`, raising `TypeError` on unknown keys and accepting arbitrary values for known keys. Now filters data to known dataclass fields before construction.
-- `ColorCastConfig.cache_size` and `enable_parallel` were dead configuration fields. `enable_parallel` is now wired into `BatchProcessor` (caps `max_workers` to 1 when false); `cache_size` is documented as informational.
+- `enable_parallel` was a dead configuration field; it is now wired into `BatchProcessor` (caps `max_workers` to 1 when false).
 - `MethodComparison.compute_histogram_distance` divided by `hist.sum()` without guarding zero, producing NaN metrics on empty or degenerate channels. Both histograms now guard the divisor.
 - `visualize_method_comparison` in `colorcast/analysis/visualization.py` raised `UnboundLocalError` when called with a custom `figsize` because the `n_rows` variable was assigned only inside the `if figsize is None:` branch. `n_rows` is now computed before that branch.
 - Added a missing import and updated docstrings in GPU functions.
@@ -32,7 +97,6 @@
 ### Added
 
 - `tests/test_validators_enhanced.py` with 11 tests covering extension-spoofed file rejection, NaN and Inf pixel detection, and malformed shape rejection via `normalize_to_float32`.
-- `TransferMethodRegistry.transfer_cached` for optional LRU-cached style transfer, with `cache_stats` and `clear_cache`. The cache is disabled by default; set `cache_size` > 0 on the registry constructor to enable it.
 
 ### Changed
 
