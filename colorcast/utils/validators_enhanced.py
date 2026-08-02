@@ -237,7 +237,7 @@ def validate_image_file(
             raise ValidationError(f"File is not a valid image: {e}") from e
 
         path_ext = path_obj.suffix.lower()
-        expected_ext = _PIL_FORMAT_TO_EXT.get(fmt or "")
+        expected_ext = _PIL_FORMAT_TO_EXT.get(fmt or "", "")
         _check_extension_matches(expected_ext, path_ext, fmt or "unknown")
         return
 

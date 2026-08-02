@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 import numpy as np
-from skimage import img_as_float, io, transform
+from skimage import img_as_float, io, transform  # type: ignore[attr-defined]
 
 from colorcast.utils.exceptions import ImageLoadError, InvalidImageFormatError, ValidationError
 from colorcast.utils.validators_enhanced import (

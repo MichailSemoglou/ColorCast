@@ -175,7 +175,7 @@ class MethodComparison:
         reference: np.ndarray,
         methods: dict[str, Callable],
         include_baseline: bool = True,
-    ) -> dict[str, dict[str, float]]:
+    ) -> dict[str, dict[str, float | str]]:
         """
         Compare multiple transfer methods with various metrics.
 
@@ -198,7 +198,7 @@ class MethodComparison:
             >>> for method, metrics in results.items():
             ...     print(f"{method}: PSNR={metrics['psnr']:.2f}")
         """
-        results: dict[str, dict[str, float]] = {}
+        results: dict[str, dict[str, float | str]] = {}
 
         # Include baseline (source vs reference) if requested
         if include_baseline:

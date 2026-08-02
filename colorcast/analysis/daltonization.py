@@ -248,7 +248,7 @@ def daltonize(
     if intensity < 1e-6:
         return normalize_to_float32(original_img)
 
-    simulated = ColorBlindSimulator().transform_color_space(original_img, deficiency_type)
+    simulated = ColorBlindSimulator().transform_color_space(original_img, deficiency_type)  # type: ignore[arg-type]
     em = get_error_map(original_img, simulated)
     return apply_daltonization(
         original_img, em, deficiency_type, intensity=intensity, simulated_img=simulated

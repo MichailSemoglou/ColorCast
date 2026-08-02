@@ -68,7 +68,7 @@ def compute_dashboard(
     simulator = ColorBlindSimulator()
 
     def _simulate_and_map(deficiency: str) -> tuple[str, np.ndarray, ErrorMap, dict[str, float]]:
-        sim = simulator.transform_color_space(image_array, deficiency)
+        sim = simulator.transform_color_space(image_array, deficiency)  # type: ignore[arg-type]
         em = get_error_map(image_array, sim, compute_dE00=True)
         stats = _summarize(em)
         return deficiency, sim, em, stats
