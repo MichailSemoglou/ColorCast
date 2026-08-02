@@ -1,6 +1,6 @@
 [project]
 name = "colorcast"
-version = "2.4.2"
+dynamic = ["version"]
 description = "Color and style transfer toolkit for images"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -43,19 +43,18 @@ dev = [
     "pytest-cov>=4.0.0",
     "pytest-qt>=4.0.0",
     "pytest-benchmark>=4.0.0",
-    "pytest-mock>=3.10.0",
     "hypothesis>=6.0.0",
+    "imageio>=2.31.0",
     "black>=23.0.0",
     "isort>=5.12.0",
     "mypy>=1.0.0",
-    "pylint>=2.17.0",
     "ruff>=0.1.0",
     "Pillow>=9.0.0",
 ]
 
 docs = [
     "sphinx>=7.0.0",
-    "sphinx-rtd-theme>=2.0.0",
+    "sphinx-rtd-theme==3.1.0",
     "sphinx-autodoc-typehints>=1.24.0",
     "sphinxcontrib-jquery>=4.1.0",
 ]
@@ -82,6 +81,9 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 exclude = ["tests*"]
 
+[tool.setuptools.dynamic]
+version = {attr = "colorcast._version.__version__"}
+
 [tool.black]
 line-length = 100
 target-version = ['py310', 'py311', 'py312', 'py313']
@@ -95,6 +97,22 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "C4"]
+ignore = ["B028"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/test_property_based.py" = ["E501"]
+"tests/test_comparison.py" = ["E501"]
+"tests/test_cli.py" = ["E501"]
+"tests/test_entry_points.py" = ["E501"]
+"tests/test_integration_comprehensive.py" = ["E501"]
+"tests/test_performance.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,13 +1,21 @@
 """Plugin architecture for transfer methods."""
 
+import threading
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Type
+from typing import Any
+
 import numpy as np
+
 from colorcast.processing.cache import StyleTransferCache
 
 
 class TransferMethod(ABC):
     """Abstract base class for transfer methods."""
+
+    # --- Slider label constants for subclasses -------------------------------
+    _SLIDER_STYLE = "Style Intensity:"
+    _SLIDER_SEVERITY = "Severity (0%=normal, 100%=full):"
+    _SLIDER_CORRECTION = "Correction Intensity (0%=original, 100%=fully corrected):"
 
     @property
     @abstractmethod
@@ -22,7 +30,7 @@ class TransferMethod(ABC):
         pass
 
     @property
-    def parameters(self) -> Dict[str, dict]:
+    def parameters(self) -> dict[str, dict]:
         """Configurable parameters and their defaults."""
         return {}
 
@@ -35,9 +43,9 @@ class TransferMethod(ABC):
     #: Label for the GUI intensity slider. Transfer methods blend source
     #: and styled image; simulators treat the slider as severity and
     #: Daltonizers as correction strength.
-    slider_label: str = "Style Intensity:"
+    slider_label: str = _SLIDER_STYLE
 
-    def _require_reference(self, reference: Optional[np.ndarray]) -> np.ndarray:
+    def _require_reference(self, reference: np.ndarray | None) -> np.ndarray:
         """Validate that a reference image was provided.
 
         Args:
@@ -57,7 +65,7 @@ class TransferMethod(ABC):
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         **kwargs: Any,
     ) -> np.ndarray:
         """
@@ -76,21 +84,67 @@ class TransferMethod(ABC):
 
 
 class TransferMethodRegistry:
-    """Registry for transfer methods with optional LRU caching.
+    """Registry for transfer methods."""
 
-    Callers that want to avoid recomputing the same transfer on the same
-    image pair can use :meth:`transfer_cached` instead of creating a
-    method instance and calling :meth:`TransferMethod.transfer` directly.
-    The cache is disabled by default; set ``cache_size`` > 0 to enable it.
-    """
+    def __init__(self):
+        self._methods: dict[str, type[TransferMethod]] = {}
+        self._cache: StyleTransferCache | None = None  # lazy-initialized
+        self._cache_lock = threading.Lock()
 
-    def __init__(self, cache_size: int = 0):
-        self._methods: Dict[str, Type[TransferMethod]] = {}
-        self._cache: Optional[StyleTransferCache] = None
-        if cache_size > 0:
-            self._cache = StyleTransferCache(max_size=cache_size)
+    def _ensure_cache(self) -> "StyleTransferCache":
+        with self._cache_lock:
+            if self._cache is None:
+                from colorcast.processing.cache import LRUCache
 
-    def register(self, method_class: Type[TransferMethod]) -> Type[TransferMethod]:
+                self._cache = LRUCache(max_size=32)
+            return self._cache
+
+    def transfer_cached(
+        self,
+        method_id: str,
+        source: np.ndarray,
+        reference: np.ndarray | None,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        """
+        Apply a transfer method, caching the result for repeated calls.
+
+        Args:
+            method_id: Unique method identifier.
+            source: Source image (H, W, 3).
+            reference: Reference image or None.
+            **kwargs: Method-specific parameters forwarded to ``transfer``.
+
+        Returns:
+            Transferred image (H, W, 3).
+        """
+        cache = self._ensure_cache()
+        cache_key = cache.generate_key(source, reference, method_id, kwargs)
+
+        def _compute() -> np.ndarray:
+            method = self.get_method(method_id)
+            return method.transfer(source, reference, **kwargs)
+
+        return cache.get_or_compute(cache_key, _compute)
+
+    def cache_stats(self) -> dict:
+        """
+        Get cache hit/miss/size statistics.
+
+        Returns:
+            Dictionary with ``hits``, ``misses``, and ``size`` keys, or
+            an empty dict when the cache has not been initialized.
+        """
+        if self._cache is None:
+            return {}
+        return self._cache.stats()
+
+    def clear_cache(self) -> None:
+        """Remove all cached entries."""
+        if self._cache is not None:
+            self._cache.clear()
+
+    def register(self, method_class: type[TransferMethod]) -> type[TransferMethod]:
         """
         Register a transfer method.
 
@@ -121,7 +175,7 @@ class TransferMethodRegistry:
             raise ValueError(f"Unknown transfer method: {method_id}")
         return self._methods[method_id]()
 
-    def list_methods(self) -> Dict[str, str]:
+    def list_methods(self) -> dict[str, str]:
         """
         List all registered methods.
 
@@ -129,77 +183,10 @@ class TransferMethodRegistry:
             Dictionary mapping method IDs to display names
         """
         methods = {}
-        for method_id, method_class in self._methods.items():
+        for _method_id, method_class in self._methods.items():
             instance = method_class()
             methods[instance.id] = instance.name
         return methods
-
-    def has_method(self, method_id: str) -> bool:
-        """
-        Check if a method is registered.
-
-        Args:
-            method_id: Method identifier to check
-
-        Returns:
-            True if method is registered, False otherwise
-        """
-        return method_id in self._methods
-
-    def transfer_cached(
-        self,
-        method_id: str,
-        source: np.ndarray,
-        reference: Optional[np.ndarray],
-        **kwargs: Any,
-    ) -> np.ndarray:
-        """
-        Apply a transfer method with optional LRU caching.
-
-        If the registry was initialized with ``cache_size > 0``, the result
-        is cached by (content hash, style hash, method id, parameters) and
-        re-used when the same inputs are requested again. Otherwise this is
-        equivalent to ``registry.get_method(method_id).transfer(source,
-        reference, **kwargs)``.
-
-        Args:
-            method_id: Unique identifier of the method
-            source: Source image (H, W, 3)
-            reference: Reference image (H, W, 3), or None for methods with
-                ``requires_reference = False``
-            **kwargs: Method-specific parameters
-
-        Returns:
-            Transferred image (H, W, 3)
-        """
-        method = self.get_method(method_id)
-        if self._cache is None:
-            return method.transfer(source, reference, **kwargs)
-        return self._cache.get_or_compute(
-            self._cache._generate_key(
-                self._cache._compute_hash(source.copy()),
-                self._cache._style_hash(reference),
-                method_id,
-                kwargs,
-            ),
-            lambda: method.transfer(source, reference, **kwargs),
-        )
-
-    def cache_stats(self) -> dict | None:
-        """
-        Return cache statistics, or None if caching is disabled.
-
-        Returns:
-            Dict with ``hits``, ``misses``, ``size`` keys, or None
-        """
-        if self._cache is None:
-            return None
-        return self._cache.stats()
-
-    def clear_cache(self) -> None:
-        """Clear all cached transfer results."""
-        if self._cache is not None:
-            self._cache.clear()
 
 
 # Global registry instance for transfer methods
@@ -225,7 +212,7 @@ class HistogramMatchingMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         **kwargs: Any,
     ) -> np.ndarray:
         reference = self._require_reference(reference)
@@ -250,7 +237,7 @@ class MeanStdTransferMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         **kwargs: Any,
     ) -> np.ndarray:
         reference = self._require_reference(reference)
@@ -273,7 +260,7 @@ class LabTransferMethod(TransferMethod):
         return "lab_reinhard"
 
     @property
-    def parameters(self) -> Dict[str, dict]:
+    def parameters(self) -> dict[str, dict]:
         return {
             "alpha": {
                 "default": 1.0,
@@ -286,7 +273,7 @@ class LabTransferMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         alpha: float = 1.0,
         **kwargs: Any,
     ) -> np.ndarray:
@@ -312,7 +299,7 @@ class LutLinearMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         **kwargs: Any,
     ) -> np.ndarray:
         reference = self._require_reference(reference)
@@ -337,7 +324,7 @@ class LutSCurveMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         **kwargs: Any,
     ) -> np.ndarray:
         reference = self._require_reference(reference)
@@ -362,7 +349,7 @@ class LutContrastMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         **kwargs: Any,
     ) -> np.ndarray:
         reference = self._require_reference(reference)
@@ -385,7 +372,7 @@ class SelectiveShadowsMethod(TransferMethod):
         return "selective_shadows"
 
     @property
-    def parameters(self) -> Dict[str, dict]:
+    def parameters(self) -> dict[str, dict]:
         return {
             "shadow_threshold": {
                 "default": 0.3,
@@ -398,7 +385,7 @@ class SelectiveShadowsMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         shadow_threshold: float = 0.3,
         **kwargs: Any,
     ) -> np.ndarray:
@@ -424,7 +411,7 @@ class SelectiveMidtonesMethod(TransferMethod):
         return "selective_midtones"
 
     @property
-    def parameters(self) -> Dict[str, dict]:
+    def parameters(self) -> dict[str, dict]:
         return {
             "shadow_threshold": {
                 "default": 0.3,
@@ -443,7 +430,7 @@ class SelectiveMidtonesMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         shadow_threshold: float = 0.3,
         highlight_threshold: float = 0.7,
         **kwargs: Any,
@@ -474,7 +461,7 @@ class SelectiveHighlightsMethod(TransferMethod):
         return "selective_highlights"
 
     @property
-    def parameters(self) -> Dict[str, dict]:
+    def parameters(self) -> dict[str, dict]:
         return {
             "highlight_threshold": {
                 "default": 0.7,
@@ -487,7 +474,7 @@ class SelectiveHighlightsMethod(TransferMethod):
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         highlight_threshold: float = 0.7,
         **kwargs: Any,
     ) -> np.ndarray:
@@ -519,12 +506,12 @@ class DeuteranopiaSimulatorMethod(TransferMethod):
         return "simulate_deuteranopia"
 
     requires_reference = False
-    slider_label = "Severity (0%=normal, 100%=full):"
+    slider_label = TransferMethod._SLIDER_SEVERITY
 
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         **kwargs: Any,
     ) -> np.ndarray:
         from colorcast.processing.simulation import ColorBlindSimulator
@@ -545,12 +532,12 @@ class ProtanopiaSimulatorMethod(TransferMethod):
         return "simulate_protanopia"
 
     requires_reference = False
-    slider_label = "Severity (0%=normal, 100%=full):"
+    slider_label = TransferMethod._SLIDER_SEVERITY
 
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         **kwargs: Any,
     ) -> np.ndarray:
         from colorcast.processing.simulation import ColorBlindSimulator
@@ -571,12 +558,12 @@ class TritanopiaSimulatorMethod(TransferMethod):
         return "simulate_tritanopia"
 
     requires_reference = False
-    slider_label = "Severity (0%=normal, 100%=full):"
+    slider_label = TransferMethod._SLIDER_SEVERITY
 
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         **kwargs: Any,
     ) -> np.ndarray:
         from colorcast.processing.simulation import ColorBlindSimulator
@@ -603,12 +590,12 @@ class DaltonizeProtanopiaMethod(TransferMethod):
         return "daltonize_protanopia"
 
     requires_reference = False
-    slider_label = "Correction Intensity (0%=original, 100%=fully corrected):"
+    slider_label = TransferMethod._SLIDER_CORRECTION
 
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         intensity: float = 1.0,
         **kwargs: Any,
     ) -> np.ndarray:
@@ -630,12 +617,12 @@ class DaltonizeDeuteranopiaMethod(TransferMethod):
         return "daltonize_deuteranopia"
 
     requires_reference = False
-    slider_label = "Correction Intensity (0%=original, 100%=fully corrected):"
+    slider_label = TransferMethod._SLIDER_CORRECTION
 
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         intensity: float = 1.0,
         **kwargs: Any,
     ) -> np.ndarray:
@@ -657,12 +644,12 @@ class DaltonizeTritanopiaMethod(TransferMethod):
         return "daltonize_tritanopia"
 
     requires_reference = False
-    slider_label = "Correction Intensity (0%=original, 100%=fully corrected):"
+    slider_label = TransferMethod._SLIDER_CORRECTION
 
     def transfer(
         self,
         source: np.ndarray,
-        reference: Optional[np.ndarray],
+        reference: np.ndarray | None,
         intensity: float = 1.0,
         **kwargs: Any,
     ) -> np.ndarray:

@@ -1,7 +1,8 @@
 """Tests for image loading and preprocessing."""
 
-import pytest
 import numpy as np
+import pytest
+
 from colorcast.processing.image_loader import ensure_rgb, load_image, save_image
 from colorcast.utils.exceptions import InvalidImageFormatError
 
@@ -115,7 +116,6 @@ class TestLoadImage:
     def test_load_image_creates_test_files(self, tmp_path):
         """Test loading actual image files."""
         # Create test image files
-        import tempfile
         from skimage import io
 
         test_img = (np.random.rand(50, 50, 3) * 255).astype(np.uint8)

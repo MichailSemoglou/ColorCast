@@ -1,88 +1,78 @@
 """
-GPU-accelerated color transfer using CuPy.
+Color transfer functions with CuPy-backed acceleration where available.
 
-This module provides GPU implementations of color transfer algorithms
-for improved performance on large images and batch processing.
+The ``gpu_`` prefix is historical: these entry points accept numpy arrays
+and return numpy arrays regardless of whether CuPy is installed.  When
+CuPy is absent every function falls back to the CPU path transparently.
+Only ``gpu_mean_std_transfer`` and ``gpu_lab_transfer`` exercise genuine GPU
+kernels; the
+remaining functions route through scikit-image on the CPU and are kept
+under their existing names so callers do not need to change import paths
+when GPU kernels land.
+
+Use ``is_gpu_available()`` to check at runtime whether the accelerator
+will be used.
 """
 
 import numpy as np
 
+from colorcast.processing.transfer_methods import (
+    _EPSILON,
+    _LAB_AB_BOUNDS,
+    _LAB_L_BOUNDS,
+    _meanstd_transfer,
+    validate_and_resize_images,
+)
+
 # Try to import CuPy, fallback gracefully if not available
 try:
     import cupy as cp
+
     HAS_CUPY = True
 except ImportError:
     HAS_CUPY = False
     cp = None  # Type stub for mypy
-    import warnings
-    warnings.warn("CuPy is not installed. GPU acceleration will be disabled.")
 
 
-def gpu_histogram_matching(
-    source: np.ndarray,
-    reference: np.ndarray
-) -> np.ndarray:
+def is_gpu_available() -> bool:
+    """Check whether CuPy is installed and a usable CUDA device is present."""
+    if not HAS_CUPY:
+        return False
+    try:
+        return cp.cuda.runtime.getDeviceCount() > 0
+    except cp.cuda.runtime.CUDARuntimeError:
+        return False
+
+
+def gpu_histogram_matching(source: np.ndarray, reference: np.ndarray) -> np.ndarray:
     """
-    GPU-accelerated histogram matching using CuPy.
+    Histogram matching (CPU-only until a native CuPy kernel lands).
 
-    Note: The CuPy path currently copies channel data to the CPU for
-    histogram matching via scikit-image and transfers results back.
-    It is therefore no faster than the CPU fallback.  A native GPU
-    histogram implementation is planned.
+    Both CuPy-available and fallback paths currently route through
+    scikit-image on the CPU.  The function is kept as a named entry point
+    so callers do not need to change when GPU acceleration arrives.
 
     Args:
-        source: Source image array (H, W, 3) in range [0, 255]
-        reference: Reference image array (H, W, 3) in range [0, 255]
+        source: Source image array (H, W, 3), any numeric dtype.
+        reference: Reference image array (H, W, 3), any numeric dtype.
 
     Returns:
-        Matched image array (H, W, 3) in range [0, 255]
+        Matched image array (H, W, 3), float32 in range [0, 1].
     """
-    if not HAS_CUPY:
-        # Fallback to CPU implementation
-        from skimage import exposure
-        result = np.empty_like(source)
-        for i in range(3):
-            result[:, :, i] = exposure.match_histograms(
-                source[:, :, i], reference[:, :, i]
-            )
-        return result.astype(source.dtype)
-    
-    # Convert to GPU arrays (float32)
-    source_gpu = cp.asarray(source, dtype=cp.float32)
-    reference_gpu = cp.asarray(reference, dtype=cp.float32)
-    
-    # Compute histogram matching per channel on GPU
-    matched_gpu = cp.empty_like(source_gpu)
+    from skimage import exposure
+
+    source, reference = validate_and_resize_images(source, reference)
+
+    result = np.empty_like(source)
     for i in range(3):
-        # Extract channels
-        source_channel = source_gpu[:, :, i]
-        reference_channel = reference_gpu[:, :, i]
-        
-        # Match histograms using scikit-image compatible implementation
-        # For now, use CPU for histogram matching as it's complex
-        # but move data back to CPU for the matching operation
-        source_cpu = cp.asnumpy(source_channel)
-        reference_cpu = cp.asnumpy(reference_channel)
-        
-        from skimage import exposure
-        matched_channel = exposure.match_histograms(
-            source_cpu, reference_cpu
-        )
-        
-        matched_gpu[:, :, i] = cp.asarray(matched_channel, dtype=cp.float32)
-    
-    # Transfer result back to CPU
-    result = cp.asnumpy(matched_gpu).astype(source.dtype)
-    return result
+        result[:, :, i] = exposure.match_histograms(source[:, :, i], reference[:, :, i])
+    return result.astype(source.dtype)
 
 
-def gpu_mean_std_transfer(
-    source: np.ndarray,
-    reference: np.ndarray
-) -> np.ndarray:
+def gpu_mean_std_transfer(source: np.ndarray, reference: np.ndarray) -> np.ndarray:
     """
     GPU-accelerated mean and standard deviation transfer using CuPy.
-    
+
     Args:
         source: Source image array (H, W, 3) in range [0, 1]
         reference: Reference image array (H, W, 3) in range [0, 1]
@@ -90,23 +80,12 @@ def gpu_mean_std_transfer(
     Returns:
         Transferred image array (H, W, 3) in range [0, 1]
     """
-    if not HAS_CUPY:
-        # Fallback to CPU implementation
-        result = np.empty_like(source)
-        for i in range(3):
-            source_mean = np.mean(source[:, :, i])
-            source_std = np.std(source[:, :, i])
-            ref_mean = np.mean(reference[:, :, i])
-            ref_std = np.std(reference[:, :, i])
-            
-            epsilon = 1e-8
-            result[:, :, i] = (
-                (source[:, :, i] - source_mean)
-                * (ref_std / (source_std + epsilon))
-            ) + ref_mean
-        
+    source, reference = validate_and_resize_images(source, reference)
+
+    if not is_gpu_available():
+        result = _meanstd_transfer(source, reference)
         return np.clip(result, 0, 1).astype(source.dtype)
-    
+
     # Convert to GPU arrays (images are already float32 in [0, 1])
     source_gpu = cp.asarray(source, dtype=cp.float32)
     reference_gpu = cp.asarray(reference, dtype=cp.float32)
@@ -124,10 +103,8 @@ def gpu_mean_std_transfer(
         ref_std = cp.std(reference_channel)
 
         # Apply transfer
-        epsilon = 1e-8
         result_gpu[:, :, i] = (
-            (source_channel - source_mean)
-            * (ref_std / (source_std + epsilon))
+            (source_channel - source_mean) * (ref_std / (source_std + _EPSILON))
         ) + ref_mean
 
     # Clip to [0, 1]
@@ -146,9 +123,10 @@ def gpu_lab_transfer(
     """
     GPU-accelerated Lab color space transfer using CuPy.
 
-    Note: CuPy has no rgb2lab/lab2rgb equivalent, so both the GPU and
-    CPU branches route through scikit-image on the CPU.  A native GPU
-    Lab pipeline is planned.
+    Lab conversion and back-conversion run on CPU (no CuPy equivalent in
+    scikit-image).  The per-channel mean/standard-deviation transfer,
+    channel-wise clipping, and alpha blending are offloaded to CuPy when a
+    GPU is present.
 
     Args:
         source: Source image array (H, W, 3) in range [0, 1]
@@ -158,110 +136,57 @@ def gpu_lab_transfer(
     Returns:
         Transferred image array (H, W, 3) in range [0, 1]
     """
-    if not HAS_CUPY:
-        # Fallback to CPU implementation
-        from skimage import color
+    source, reference = validate_and_resize_images(source, reference)
+    alpha = float(np.clip(alpha, 0.0, 1.0))
 
-        # Clamp alpha
-        alpha = np.clip(alpha, 0.0, 1.0)
-
-        # Convert RGB to Lab color space
-        source_lab = color.rgb2lab(source)
-        reference_lab = color.rgb2lab(reference)
-
-        # Compute statistics in Lab space
-        result_lab = np.empty_like(source_lab)
-        for i in range(3):
-            # Compute mean and std for source and reference
-            source_mean = np.mean(source_lab[:, :, i])
-            source_std = np.std(source_lab[:, :, i])
-            ref_mean = np.mean(reference_lab[:, :, i])
-            ref_std = np.std(reference_lab[:, :, i])
-
-            # Apply statistical transfer
-            epsilon = 1e-8
-            result_lab[:, :, i] = (
-                (source_lab[:, :, i] - source_mean)
-                * (ref_std / (source_std + epsilon))
-            ) + ref_mean
-
-        # Clip to valid Lab ranges
-        result_lab[:, :, 0] = np.clip(result_lab[:, :, 0], 0, 100)  # L channel
-        result_lab[:, :, 1] = np.clip(result_lab[:, :, 1], -128, 127)  # a channel
-        result_lab[:, :, 2] = np.clip(result_lab[:, :, 2], -128, 127)  # b channel
-
-        # Apply alpha blending for partial transfer
-        if alpha < 1.0:
-            result_lab = source_lab * (1 - alpha) + result_lab * alpha
-
-        # Convert Lab back to RGB
-        result_rgb = color.lab2rgb(result_lab)
-
-        # Ensure result is in valid range [0, 1]
-        result_rgb = np.clip(result_rgb, 0, 1).astype(source.dtype)
-
-        return result_rgb
-
-    # CuPy has no rgb2lab/lab2rgb equivalent — both branches route through
-    # scikit-image on the CPU.  This block exists to preserve the API shape
-    # until a native GPU Lab pipeline lands.
     from skimage import color
-
-    alpha = float(alpha)
-    alpha = max(0.0, min(1.0, alpha))
 
     source_lab = color.rgb2lab(source)
     reference_lab = color.rgb2lab(reference)
 
-    result_lab = np.empty_like(source_lab)
-    for i in range(3):
-        source_mean = np.mean(source_lab[:, :, i])
-        source_std = np.std(source_lab[:, :, i])
-        ref_mean = np.mean(reference_lab[:, :, i])
-        ref_std = np.std(reference_lab[:, :, i])
-
-        epsilon = 1e-8
-        result_lab[:, :, i] = (
-            (source_lab[:, :, i] - source_mean)
-            * (ref_std / (source_std + epsilon))
-        ) + ref_mean
-
-    result_lab[:, :, 0] = np.clip(result_lab[:, :, 0], 0, 100)
-    result_lab[:, :, 1] = np.clip(result_lab[:, :, 1], -128, 127)
-    result_lab[:, :, 2] = np.clip(result_lab[:, :, 2], -128, 127)
-
-    if alpha < 1.0:
-        result_lab = source_lab * (1 - alpha) + result_lab * alpha
+    if is_gpu_available():
+        source_gpu = cp.asarray(source_lab, dtype=cp.float32)
+        reference_gpu = cp.asarray(reference_lab, dtype=cp.float32)
+        result_gpu = cp.empty_like(source_gpu)
+        for i in range(3):
+            s_ch = source_gpu[:, :, i]
+            r_ch = reference_gpu[:, :, i]
+            result_gpu[:, :, i] = (
+                (s_ch - cp.mean(s_ch)) * (cp.std(r_ch) / (cp.std(s_ch) + _EPSILON))
+            ) + cp.mean(r_ch)
+        result_gpu[:, :, 0] = cp.clip(result_gpu[:, :, 0], *_LAB_L_BOUNDS)
+        result_gpu[:, :, 1] = cp.clip(result_gpu[:, :, 1], *_LAB_AB_BOUNDS)
+        result_gpu[:, :, 2] = cp.clip(result_gpu[:, :, 2], *_LAB_AB_BOUNDS)
+        if alpha < 1.0:
+            result_gpu = source_gpu * (1.0 - alpha) + result_gpu * alpha
+        result_lab = cp.asnumpy(result_gpu)
+    else:
+        result_lab = _meanstd_transfer(source_lab, reference_lab)
+        result_lab[:, :, 0] = np.clip(result_lab[:, :, 0], *_LAB_L_BOUNDS)
+        result_lab[:, :, 1] = np.clip(result_lab[:, :, 1], *_LAB_AB_BOUNDS)
+        result_lab[:, :, 2] = np.clip(result_lab[:, :, 2], *_LAB_AB_BOUNDS)
+        if alpha < 1.0:
+            result_lab = source_lab * (1.0 - alpha) + result_lab * alpha
 
     result_rgb = color.lab2rgb(result_lab)
     return np.clip(result_rgb, 0, 1).astype(source.dtype)
 
 
-def gpu_histogram_matching_multichannel(
-    source: np.ndarray,
-    reference: np.ndarray
-) -> np.ndarray:
+def gpu_histogram_matching_multichannel(source: np.ndarray, reference: np.ndarray) -> np.ndarray:
     """
-    GPU-accelerated multichannel histogram matching using CuPy.
-    
+    Multichannel histogram matching (CPU-only until a native CuPy kernel lands).
+
+    Convenience alias for :func:`gpu_histogram_matching` that accepts and
+    returns the same float32 [0, 1] contract as the rest of the package.
+
     Args:
-        source: Source image array (H, W, 3) in range [0, 255]
-        reference: Reference image array (H, W, 3) in range [0, 255]
+        source: Source image array (H, W, 3), any numeric dtype.
+        reference: Reference image array (H, W, 3), any numeric dtype.
 
     Returns:
-        Matched image array (H, W, 3) in range [0, 255]
+        Matched image array (H, W, 3), float32 in range [0, 1].
     """
-    if not HAS_CUPY:
-        # Fallback to CPU implementation
-        from colorcast.processing.transfer_methods import match_histograms_multichannel
-        return match_histograms_multichannel(source, reference)
-    
     return gpu_histogram_matching(source, reference)
-
-
-def is_gpu_available() -> bool:
-    """Check if GPU acceleration is available."""
-    return HAS_CUPY
 
 
 # Export functions for module API

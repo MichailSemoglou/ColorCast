@@ -12,19 +12,21 @@ Public API
 - :func:`daltonize` — convenience wrapper that runs simulation, error analysis,
   and correction in one call.
 
-Shift matrices
---------------
-The module stores a 3×3 shift matrix for each supported deficiency:
+Lab-space correction
+--------------------
+The correction operates in the CIE Lab* (a*, b*) chromaticity plane rather
+than gamma-encoded sRGB.  For each deficiency type, the lost chromatic
+information — measured by the signed (a*, b*) difference in the error map —
+is rotated into the surviving chromatic axis:
 
-- ``deuteranopia`` / ``protanopia`` — red-green error is routed into the Blue
-  channel, which is preserved in both conditions.
-- ``tritanopia`` — blue error is routed equally into Red and Green, encoding
-  the correction as a luminance modulation.
+- ``deuteranopia`` / ``protanopia`` — red-green (a*) error is redirected
+  into the blue-yellow (b*) channel.
+- ``tritanopia`` — blue-yellow (b*) error is redirected into the red-green
+  (a*) channel.
 
-Correction is spatially weighted by the CIE-Lab* chromaticity error map so
-low-error pixels remain largely unchanged, and the original luminance channel
-is restored after correction (except for tritanopia; see below) to prevent
-brightness drift.
+Correction is spatially weighted by the chromaticity error map so
+low-error pixels remain largely unchanged, and the original L* channel is
+restored to prevent brightness drift.
 
 For the color-vision science behind this module, see the project wiki:
 "Color-Vision Background".
@@ -53,98 +55,101 @@ from skimage import color as skcolor
 from colorcast.analysis.error_map import ErrorMap, get_error_map
 from colorcast.processing.image_loader import normalize_to_float32
 
-
 # ---------------------------------------------------------------------------
-# Shift matrices (rows = [ΔR, ΔG, ΔB] output;  cols = [eR, eG, eB] input)
+# Lab-space shift coefficients
 # ---------------------------------------------------------------------------
 #
-# Multiplication is: correction_flat = error_flat @ SHIFT.T
-# where error_flat is (H*W, 3) and correction_flat is (H*W, 3).
+# Each deficiency maps a 2D (a*, b*) error vector to a 2D correction vector
+# that redirects lost chromaticity into the surviving axis.
 #
-# Convention:
-#   • SHIFT[i, j] is the coefficient by which error channel j
-#     contributes to output channel i.
-#   • Rows that are zero → that output channel is left unchanged.
-#   • Row sums are ≤ 1.0 per output channel to avoid clipping.
+#   correction_a = coeff[0] * error_a + coeff[1] * error_b
+#   correction_b = coeff[2] * error_a + coeff[3] * error_b
+#
+# For red-green deficiencies the a* error is the dominant loss; it is
+# redirected into b*.  For blue-yellow deficiency the b* error is
+# redirected into a*.
 
-_SHIFT_MATRICES: dict[str, np.ndarray] = {
-    # ── Deuteranopia (M-cone missing) ─────────────────────────────────────
-    # Red-Green confusion → redirect the Red + Green error into Blue.
-    # B += 0.7·eR + 0.1·eG (R, G unchanged: luminance handles the rest)
-    "deuteranopia": np.array(
-        [
-            [0.0, 0.0, 0.0],   # ΔR = 0
-            [0.0, 0.0, 0.0],   # ΔG = 0
-            [0.7, 0.1, 0.0],   # ΔB = 0.7·eR + 0.1·eG
-        ],
-        dtype=np.float32,
-    ),
-    # ── Protanopia (L-cone missing) ───────────────────────────────────────
-    # Same opponent axis as deuteranopia (red-green); same redistribution
-    # strategy.  Uses the same shift matrix as deuteranopia because both
-    # conditions involve red-green confusion.
-    "protanopia": np.array(
-        [
-            [0.0, 0.0, 0.0],   # ΔR = 0
-            [0.0, 0.0, 0.0],   # ΔG = 0
-            [0.7, 0.1, 0.0],   # ΔB = 0.7·eR + 0.1·eG
-        ],
-        dtype=np.float32,
-    ),
-    # ── Tritanopia (S-cone missing) ───────────────────────────────────────
-    # Blue-Yellow confusion → redirect the Blue error into both Red and Green.
-    # Adding the same amount to R and G encodes the correction as a luminance
-    # modulation, which is perceivable even without hue discrimination.
-    "tritanopia": np.array(
-        [
-            [0.0, 0.0, 0.7],   # ΔR = 0.7·eB
-            [0.0, 0.0, 0.7],   # ΔG = 0.7·eB
-            [0.0, 0.0, 0.0],   # ΔB = 0
-        ],
-        dtype=np.float32,
-    ),
+_LAB_SHIFT_COEFFICIENTS: dict[str, tuple[float, float, float, float]] = {
+    # Deuteranopia (M-cone missing): redirect a* → b*
+    "deuteranopia": (0.0, 0.0, 0.35, 0.0),
+    # Protanopia (L-cone missing): redirect a* → b* — slightly stronger
+    # coefficient because L-cone contributes more to the a* axis.
+    "protanopia": (0.0, 0.0, 0.40, 0.0),
+    # Tritanopia (S-cone missing): redirect b* → a*
+    "tritanopia": (0.0, 0.35, 0.0, 0.0),
 }
 
 
 # ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _compute_chromaticity_weight(
+    error_map: ErrorMap,
+) -> np.ndarray:
+    """Derive a per-pixel spatial weight from the chroma error map.
+
+    The chroma_error array is subsampled to keep the percentile calculation
+    constant-time regardless of image size.  Weight is ``clamp(ce / p95, 0, 1)``
+    so that only pixels with high chromatic error receive the full correction.
+
+    Returns (H, W, 1) float32 array.
+    """
+    ce = error_map.chroma_error
+    stride = max(1, ce.size // 40_000)
+    p95 = float(np.percentile(ce.flat[::stride], 95))
+    if p95 < 1e-6:
+        return np.zeros((*ce.shape, 1), dtype=np.float32)
+    weight = np.clip(ce / p95, 0.0, 1.0)
+    return weight[:, :, np.newaxis]
+
+
+# ---------------------------------------------------------------------------
+# Convenience end-to-end pipeline
+# ---------------------------------------------------------------------------
 # Core function
 # ---------------------------------------------------------------------------
+
 
 def apply_daltonization(
     original_img: np.ndarray,
     error_map: ErrorMap,
     deficiency_type: str,
     intensity: float = 1.0,
+    *,
+    simulated_img: np.ndarray | None = None,
 ) -> np.ndarray:
     """Apply the Daltonization correction to *original_img*.
 
-    The function re-encodes the chromatic information that was lost in
-    dichromatic simulation, as measured by the error map,
-    into a surviving perceptual channel that the affected
-    observer can discriminate.
+    The correction operates in the CIE Lab* (a*, b*) chromaticity plane:
+    the lost chromatic information measured by the error map is rotated
+    into the surviving chromatic axis for the given deficiency type, and
+    applied to the *simulated* image so that the color-blind observer
+    perceives the re-encoded information.
 
-    The correction is spatially weighted by the CIE Lab* chromaticity
-    error: pixels where the simulation barely changed anything are left
-    nearly untouched; pixels where large chromatic information was lost
-    receive the strongest shift. After the shift, original luminance (L*)
-    is restored to prevent brightness drift.
+    When ``simulated_img`` is None the correction is applied to the
+    original image instead (backward-compatible behavior).
+
+    Correction is spatially weighted by the chromaticity error map:
+    pixels where the simulation barely changed anything are left nearly
+    untouched; pixels where large chromatic information was lost receive
+    the strongest shift.  L* is preserved throughout.
 
     Parameters
     ----------
     original_img :
-        Source image, shape (H, W, 3), any numeric dtype.  Values may be
-        uint8 [0, 255] or float [0, 1]; the function normalises internally.
+        Source image, shape (H, W, 3), any numeric dtype.
     error_map :
-        Result of :func:`~colorcast.analysis.error_map.get_error_map`
-        computed from ``original_img`` and its simulated counterpart.
+        Result of :func:`~colorcast.analysis.error_map.get_error_map`.
     deficiency_type :
         One of ``"deuteranopia"``, ``"protanopia"``, or ``"tritanopia"``.
     intensity :
-        Global correction strength in [0.0, 1.0].  At ``0.0`` the output
-        equals the original; at ``1.0`` the full correction is applied.
-        The per-pixel chromaticity weight is applied on top of this — so
-        even at ``intensity=1.0``, low-error pixels remain essentially
-        unchanged.
+        Global correction strength in [0.0, 1.0].
+    simulated_img :
+        The dichromatic simulation of ``original_img``.  When provided,
+        the correction is applied to this image so the color-blind
+        observer sees the re-encoded information.
 
     Returns
     -------
@@ -155,104 +160,45 @@ def apply_daltonization(
     ------
     ValueError
         If ``deficiency_type`` is not supported.
-
-    Example
-    -------
-    >>> from colorcast.processing.simulation import ColorBlindSimulator
-    >>> from colorcast.analysis.error_map import get_error_map
-    >>> from colorcast.analysis.daltonization import apply_daltonization
-    >>> sim = ColorBlindSimulator().transform_color_space(original, "deuteranopia")
-    >>> em  = get_error_map(original, sim)
-    >>> corrected = apply_daltonization(original, em, "deuteranopia", intensity=0.8)
     """
-    if deficiency_type not in _SHIFT_MATRICES:
+    if deficiency_type not in _LAB_SHIFT_COEFFICIENTS:
         raise ValueError(
             f"Unknown deficiency type {deficiency_type!r}. "
-            f"Supported: {sorted(_SHIFT_MATRICES)}"
+            f"Supported: {sorted(_LAB_SHIFT_COEFFICIENTS)}"
         )
 
     intensity = float(np.clip(intensity, 0.0, 1.0))
-
-    # ── 1. Normalize original to float32 [0, 1] ─────────────────────────────
-    orig = normalize_to_float32(original_img)
-
-    H, W, _ = orig.shape
-
-    # Short-circuit: identity pass when intensity is effectively zero
+    base = normalize_to_float32(simulated_img if simulated_img is not None else original_img)
     if intensity < 1e-6:
-        return orig.copy()
+        return base.copy()
 
-    # ── 2. Compute the raw channel correction via the shift matrix ──────────
-    #
-    # error_map.signed is (H, W, 3) float32, values ≈ [−1, 1].
-    # The shift matrix M is (3, 3) where M[i, j] is the coefficient by which
-    # error channel j contributes to output channel i.
-    #
-    # We flatten to (H*W, 3) for a single vectorized matrix multiply, then
-    # reshape back.  This avoids any Python-level loops.
-    shift = _SHIFT_MATRICES[deficiency_type]   # (3, 3)
-    error_flat = error_map.signed.reshape(-1, 3)          # (H*W, 3)
-    correction_flat = error_flat @ shift.T                # (H*W, 3)
-    correction = correction_flat.reshape(H, W, 3)         # (H, W, 3)
+    base_lab = skcolor.rgb2lab(base)
 
-    # ── 3. Perceptual (chromaticity) spatial weight ─────────────────────────
-    #
-    # Subsample the chroma_error array for the percentile calculation when
-    # the image is large.  A stride of ~1 element per 40k pixels keeps the
-    # sample size roughly constant around 40 000 points regardless of image
-    # size.
-    ce = error_map.chroma_error
-    stride = max(1, ce.size // 40_000)
-    p95 = float(np.percentile(ce.flat[::stride], 95))
-    if p95 < 1e-6:
-        # The image is already safe under this deficiency; no correction needed.
-        return orig.copy()
+    weight = _compute_chromaticity_weight(error_map)
+    if float(np.max(weight)) < 1e-6:
+        return base.copy()
 
-    weight = np.clip(ce / p95, 0.0, 1.0)               # (H, W)
-    weight = weight[:, :, np.newaxis]                  # (H, W, 1) → broadcast over RGB
+    # Signed (a*, b*) error: the chromatic information lost in simulation
+    ab_error = error_map.signed_chroma_ab  # (H, W, 2)
 
-    # ── 4. Apply global intensity scale and per-pixel weight ────────────────
-    #
-    # The two scales multiply together:
-    #   • intensity    — user-facing slider: "how much Daltonization overall?"
-    #   • weight       — automatic spatial gate: "how much at this pixel?"
-    #
-    # At intensity=1.0, weight drives the correction.
-    # At intensity=0.5, the whole map is halved before the weight is applied.
-    correction *= weight * intensity
+    # Lab-space shift coefficients
+    caa, cab, cba, cbb = _LAB_SHIFT_COEFFICIENTS[deficiency_type]
+    correction_a = caa * ab_error[:, :, 0] + cab * ab_error[:, :, 1]
+    correction_b = cba * ab_error[:, :, 0] + cbb * ab_error[:, :, 1]
 
-    # ── 5. Inject the weighted correction into the original ─────────────────
-    corrected = orig + correction     # may temporarily exceed [0, 1]
+    # Apply spatial weight and intensity
+    w = weight[:, :, 0] * intensity
+    base_lab[:, :, 1] = base_lab[:, :, 1] + correction_a * w
+    base_lab[:, :, 2] = base_lab[:, :, 2] + correction_b * w
 
-    # ── 6. Luminance Preservation (L* round-trip) ───────────────────────────
-    #
-    # Use the L* channel cached in error_map.orig_l_star — it was already
-    # computed during get_error_map() — instead of calling rgb2lab(orig)
-    # again.  This eliminates one full Lab conversion (≈25% of total time
-    # on a 1080p image).
-    #
-    # skimage.rgb2lab accepts float32 and up-converts internally, so we
-    # avoid the explicit .astype(np.float64) copy on corrected_f.
-    corrected_f   = np.clip(corrected, 0.0, 1.0)
-    corrected_lab = skcolor.rgb2lab(corrected_f)   # float64 output
-
-    # Restore original lightness; preserve shifted chromaticity.
-    # orig_l_star is float32; the float64 array accepts the implicit upcast.
-    # Skip for tritanopia: the shift matrix encodes the blue-error correction
-    # as equal R+G (luminance) shifts, which are the primary carrier of the
-    # correction signal. Restoring L* would erase those shifts entirely.
-    if deficiency_type != "tritanopia":
-        corrected_lab[:, :, 0] = error_map.orig_l_star
-
-    corrected_rgb = skcolor.lab2rgb(corrected_lab)  # float64, may have tiny excursions
-    corrected_rgb = np.clip(corrected_rgb, 0.0, 1.0).astype(np.float32)
-
-    return corrected_rgb
+    corrected_rgb = skcolor.lab2rgb(base_lab)
+    return np.clip(corrected_rgb, 0.0, 1.0).astype(np.float32)
 
 
 # ---------------------------------------------------------------------------
 # Convenience end-to-end pipeline
 # ---------------------------------------------------------------------------
+
 
 def daltonize(
     original_img: np.ndarray,
@@ -290,8 +236,20 @@ def daltonize(
     >>> from colorcast.analysis.daltonization import daltonize
     >>> corrected = daltonize(original, "deuteranopia", intensity=0.9)
     """
+    from colorcast.processing.image_loader import normalize_to_float32
     from colorcast.processing.simulation import ColorBlindSimulator
+
+    intensity = float(np.clip(intensity, 0.0, 1.0))
+    if deficiency_type not in _LAB_SHIFT_COEFFICIENTS:
+        raise ValueError(
+            f"Unknown deficiency type {deficiency_type!r}. "
+            f"Supported: {sorted(_LAB_SHIFT_COEFFICIENTS)}"
+        )
+    if intensity < 1e-6:
+        return normalize_to_float32(original_img)
 
     simulated = ColorBlindSimulator().transform_color_space(original_img, deficiency_type)
     em = get_error_map(original_img, simulated)
-    return apply_daltonization(original_img, em, deficiency_type, intensity=intensity)
+    return apply_daltonization(
+        original_img, em, deficiency_type, intensity=intensity, simulated_img=simulated
+    )

@@ -1,9 +1,10 @@
 """Batch processing utilities for ColorCast."""
 
 import logging
-from pathlib import Path
-from typing import List, Callable, Optional, Tuple
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
 from colorcast.processing.image_loader import load_image, save_image
 from colorcast.utils.exceptions import ImageLoadError
 
@@ -11,14 +12,20 @@ logger = logging.getLogger(__name__)
 
 
 class BatchProcessor:
-    """Process multiple images in batch with error handling and logging."""
+    """Process multiple images in batch with error handling and logging.
+
+    Instances are safe for sequential reuse — call
+    :meth:`process_directory` as many times as needed.  Do not share a single
+    instance across overlapping concurrent calls; ``self.failed_files`` is
+    reassigned (not appended) on each run.
+    """
 
     def __init__(
         self,
         transfer_method: Callable,
         max_workers: int = 4,
         enable_parallel: bool = True,
-        progress_callback: Optional[Callable[[int, int], None]] = None,
+        progress_callback: Callable[[int, int], None] | None = None,
     ):
         """
         Initialize batch processor.
@@ -34,15 +41,15 @@ class BatchProcessor:
         self.transfer_method = transfer_method
         self.max_workers = 1 if not enable_parallel else max_workers
         self.progress_callback = progress_callback
-        self.failed_files: List[Tuple[Path, str]] = []
+        self.failed_files: list[tuple[Path, str]] = []
 
     def process_directory(
         self,
         content_dir: Path,
-        style_image: Optional[Path],
+        style_image: Path | None,
         output_dir: Path,
         pattern: str = "*.jpg",
-    ) -> List[Path]:
+    ) -> list[Path]:
         """
         Process all images in directory with same style.
 
@@ -56,6 +63,8 @@ class BatchProcessor:
         Returns:
             List of output file paths
         """
+        self.failed_files = []
+
         content_dir = Path(content_dir)
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -69,7 +78,7 @@ class BatchProcessor:
 
         def process_single(
             content_path: Path,
-        ) -> Tuple[Optional[Path], Optional[Tuple[Path, str]]]:
+        ) -> tuple[Path | None, tuple[Path, str] | None]:
             """Process single image with error handling.
 
             Returns:
@@ -88,7 +97,7 @@ class BatchProcessor:
                 logger.info(f"Successfully processed: {content_path.name}")
 
                 return output_path, None
-            except ImageLoadError as e:
+            except (ImageLoadError, FileNotFoundError, OSError) as e:
                 error_msg = f"Image load error: {e!s}"
                 logger.error(f"Failed to process {content_path.name}: {error_msg}")
                 return None, (content_path, error_msg)
@@ -120,78 +129,5 @@ class BatchProcessor:
         # Update progress callback with final count
         if self.progress_callback:
             self.progress_callback(success_count, total)
-
-        return results
-
-    def process_pairs(
-        self,
-        image_pairs: List[tuple],
-        output_dir: Path,
-    ) -> List[Path]:
-        """
-        Process content/style image pairs.
-
-        Args:
-            image_pairs: List of (content_path, style_path) tuples
-            output_dir: Directory for results
-
-        Returns:
-            List of output file paths
-        """
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        results = []
-        failed_pairs = []
-
-        # Process each pair sequentially.  Unlike process_directory, every
-        # pair carries its own style image so the shared-style-image
-        # parallelisation pattern does not apply.
-        for i, (content_path, style_path) in enumerate(image_pairs):
-            try:
-                content = load_image(str(content_path))
-                style = load_image(str(style_path))
-
-                result = self.transfer_method(content, style)
-
-                output_path = output_dir / f"result_{i:04d}.jpg"
-                save_image(result, str(output_path))
-
-                logger.info(
-                    f"Successfully processed pair {i+1}: "
-                    f"{content_path.name} + {style_path.name}"
-                )
-
-                results.append(output_path)
-            except ImageLoadError as e:
-                error_msg = f"Image load error: {e!s}"
-                logger.error(
-                    f"Failed to process pair {i+1} "
-                    f"({content_path.name}, {style_path.name}): {error_msg}"
-                )
-                failed_pairs.append(((content_path, style_path), error_msg))
-            except Exception as e:  # noqa: BLE001
-                # Broad on purpose: each pair is isolated so one bad image
-                # cannot abort the rest of the batch.
-                error_msg = f"Unexpected error: {e!s}"
-                logger.error(
-                    f"Failed to process pair {i+1} "
-                    f"({content_path.name}, {style_path.name}): {error_msg}"
-                )
-                failed_pairs.append(((content_path, style_path), error_msg))
-
-            if self.progress_callback:
-                self.progress_callback(i + 1, len(image_pairs))
-
-        # Log summary
-        success_count = len(results)
-        failure_count = len(failed_pairs)
-        logger.info(
-            f"Pair processing complete: {success_count} successful, "
-            f"{failure_count} failed out of {len(image_pairs)} total pairs"
-        )
-
-        # Store failed pairs for reporting
-        self.failed_files = failed_pairs
 
         return results

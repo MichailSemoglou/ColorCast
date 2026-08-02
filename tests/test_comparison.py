@@ -2,7 +2,8 @@
 
 import numpy as np
 import pytest
-from colorcast.analysis.comparison import MethodComparison, _METRIC_DIRECTION
+
+from colorcast.analysis.comparison import _METRIC_DIRECTION, MethodComparison
 
 
 class TestComputePsnr:
@@ -149,6 +150,7 @@ class TestCompareMethods:
     def failing_method(self):
         def _fail(src, ref):
             raise RuntimeError("test failure")
+
         return _fail
 
     def test_baseline_included(self, source, reference, identity_method):
@@ -277,19 +279,35 @@ class TestGenerateComparisonReport:
 
     def test_report_is_string(self):
         cm = MethodComparison()
-        results = {"method_a": {"psnr": 20.0, "ssim": 0.9, "color_distance": 0.1, "histogram_distance": 0.05}}
+        results = {
+            "method_a": {
+                "psnr": 20.0,
+                "ssim": 0.9,
+                "color_distance": 0.1,
+                "histogram_distance": 0.05,
+            }
+        }
         report = cm.generate_comparison_report(results)
         assert isinstance(report, str)
 
     def test_report_contains_method_name(self):
         cm = MethodComparison()
-        results = {"test_method": {"psnr": 20.0, "ssim": 0.9, "color_distance": 0.1, "histogram_distance": 0.05}}
+        results = {
+            "test_method": {
+                "psnr": 20.0,
+                "ssim": 0.9,
+                "color_distance": 0.1,
+                "histogram_distance": 0.05,
+            }
+        }
         report = cm.generate_comparison_report(results)
         assert "test_method" in report
 
     def test_report_contains_rankings_section(self):
         cm = MethodComparison()
-        results = {"A": {"psnr": 20.0, "ssim": 0.9, "color_distance": 0.1, "histogram_distance": 0.05}}
+        results = {
+            "A": {"psnr": 20.0, "ssim": 0.9, "color_distance": 0.1, "histogram_distance": 0.05}
+        }
         report = cm.generate_comparison_report(results)
         assert "Rankings" in report
 
@@ -330,6 +348,15 @@ class TestFindBestMethod:
         }
         name, _ = cm.find_best_method(results, "ssim")
         assert name == "A"
+
+    def test_excludes_identity_method(self):
+        cm = MethodComparison()
+        results = {
+            "identity": {"color_distance": 0.0, "psnr": float("inf")},
+            "real_method": {"color_distance": 0.3, "psnr": 20.0},
+        }
+        name, _ = cm.find_best_method(results, "color_distance")
+        assert name == "real_method"
 
 
 class TestMetricDirection:

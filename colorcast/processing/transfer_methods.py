@@ -1,12 +1,50 @@
 """Color transfer methods and algorithms."""
 
 from typing import Literal
+
 import numpy as np
-from skimage import exposure, transform, color
+from skimage import color, exposure, transform
+
 from colorcast.processing.image_loader import normalize_to_float32
 
+# --- Shared numerical constants -------------------------------------------
+_EPSILON = 1e-8
+_LAB_L_BOUNDS = (0.0, 100.0)
+_LAB_AB_BOUNDS = (-128.0, 127.0)
 
-def validate_and_resize_images(source: np.ndarray, reference: np.ndarray) -> tuple:
+
+def _meanstd_transfer(source: np.ndarray, reference: np.ndarray) -> np.ndarray:
+    """
+    Per-channel mean and standard deviation transfer.
+
+    The caller is responsible for validating and resizing inputs before
+    calling this function.  Both arrays must be three-channel float32
+    images with identical spatial dimensions.
+
+    Args:
+        source: Pre-validated three-channel source array (H, W, 3).
+        reference: Pre-validated three-channel reference array (H, W, 3)
+            with the same spatial dimensions as ``source``.
+
+    Returns:
+        Transferred image array with the same shape and dtype as
+        ``source``.
+    """
+    result = np.empty_like(source)
+    for i in range(3):
+        source_mean = np.mean(source[:, :, i])
+        source_std = np.std(source[:, :, i])
+        ref_mean = np.mean(reference[:, :, i])
+        ref_std = np.std(reference[:, :, i])
+        result[:, :, i] = (
+            (source[:, :, i] - source_mean) * (ref_std / (source_std + _EPSILON))
+        ) + ref_mean
+    return result
+
+
+def validate_and_resize_images(
+    source: np.ndarray, reference: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Validate shape, normalize dtype and value range, and ensure both images
     are compatible for processing.
@@ -62,7 +100,7 @@ def match_histograms_multichannel(source: np.ndarray, reference: np.ndarray) -> 
     matched = np.empty_like(source)
     for i in range(3):
         matched[:, :, i] = exposure.match_histograms(source[:, :, i], reference[:, :, i])
-    
+
     return matched.astype(source.dtype)
 
 
@@ -92,18 +130,7 @@ def color_transfer_meanstd(source: np.ndarray, reference: np.ndarray) -> np.ndar
     """
     source, reference = validate_and_resize_images(source, reference)
 
-    result = np.empty_like(source)
-    for i in range(3):
-        source_mean = np.mean(source[:, :, i])
-        source_std = np.std(source[:, :, i])
-        ref_mean = np.mean(reference[:, :, i])
-        ref_std = np.std(reference[:, :, i])
-
-        # Avoid division by zero
-        epsilon = 1e-8
-        result[:, :, i] = (
-            (source[:, :, i] - source_mean) * (ref_std / (source_std + epsilon))
-        ) + ref_mean
+    result = _meanstd_transfer(source, reference)
 
     return np.clip(result, 0, 1).astype(source.dtype)
 
@@ -186,7 +213,7 @@ def color_transfer_lab(
         ValueError: If images have incorrect dimensions
     """
     source, reference = validate_and_resize_images(source, reference)
-    
+
     # Clamp alpha to valid range [0, 1]
     alpha = np.clip(alpha, 0.0, 1.0)
 
@@ -195,29 +222,12 @@ def color_transfer_lab(
     source_lab = color.rgb2lab(source)
     reference_lab = color.rgb2lab(reference)
 
-    # Compute statistics in Lab space for each channel
-    result_lab = np.empty_like(source_lab)
-    for i in range(3):
-        # Compute mean and std for source and reference
-        source_mean = np.mean(source_lab[:, :, i])
-        source_std = np.std(source_lab[:, :, i])
-        ref_mean = np.mean(reference_lab[:, :, i])
-        ref_std = np.std(reference_lab[:, :, i])
-
-        # Avoid division by zero
-        epsilon = 1e-8
-
-        # Apply statistical transfer directly in Lab space
-        # This preserves color relationships while matching statistics
-        result_lab[:, :, i] = (
-            (source_lab[:, :, i] - source_mean)
-            * (ref_std / (source_std + epsilon))
-        ) + ref_mean
+    result_lab = _meanstd_transfer(source_lab, reference_lab)
 
     # Clip to valid Lab ranges
-    result_lab[:, :, 0] = np.clip(result_lab[:, :, 0], 0, 100)  # L channel
-    result_lab[:, :, 1] = np.clip(result_lab[:, :, 1], -128, 127)  # a channel
-    result_lab[:, :, 2] = np.clip(result_lab[:, :, 2], -128, 127)  # b channel
+    result_lab[:, :, 0] = np.clip(result_lab[:, :, 0], *_LAB_L_BOUNDS)
+    result_lab[:, :, 1] = np.clip(result_lab[:, :, 1], *_LAB_AB_BOUNDS)
+    result_lab[:, :, 2] = np.clip(result_lab[:, :, 2], *_LAB_AB_BOUNDS)
 
     # Apply alpha blending for partial transfer
     if alpha < 1.0:
@@ -228,10 +238,10 @@ def color_transfer_lab(
 
     # Ensure result is in valid range [0, 1]
     result_rgb = np.clip(result_rgb, 0, 1)
-    
+
     # Preserve original dtype
     result_rgb = result_rgb.astype(source.dtype)
-    
+
     return result_rgb
 
 
@@ -272,9 +282,7 @@ def selective_color_transfer(
     source, reference = validate_and_resize_images(source, reference)
 
     # Calculate luminance using ITU-R BT.601 coefficients
-    source_lum = (
-        0.299 * source[:, :, 0] + 0.587 * source[:, :, 1] + 0.114 * source[:, :, 2]
-    )
+    source_lum = 0.299 * source[:, :, 0] + 0.587 * source[:, :, 1] + 0.114 * source[:, :, 2]
 
     # Build continuous masks via smoothstep over a narrow band around each
     # threshold to avoid hard edges at the boundary.
@@ -305,9 +313,7 @@ def selective_color_transfer(
     # Apply histogram matching to all channels
     matched = np.empty_like(source)
     for i in range(3):
-        matched[:, :, i] = exposure.match_histograms(
-            source[:, :, i], reference[:, :, i]
-        )
+        matched[:, :, i] = exposure.match_histograms(source[:, :, i], reference[:, :, i])
 
     # Blend original and matched images using mask
     # Original image shows where mask=0, matched where mask=1

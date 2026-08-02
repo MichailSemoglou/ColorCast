@@ -3,7 +3,8 @@
 import hashlib
 import threading
 from collections import OrderedDict
-from typing import Callable, Optional
+from collections.abc import Callable
+
 import numpy as np
 
 #: Key component used for methods that do not take a reference (style) image.
@@ -31,6 +32,31 @@ class StyleTransferCache:
         self.misses = 0
         self._lock = threading.Lock()
 
+    def generate_key(
+        self,
+        content: np.ndarray,
+        style: np.ndarray | None,
+        method: str,
+        params: dict | None = None,
+    ) -> str:
+        """Create a cache key for the supplied image and method inputs.
+
+        The content image is hashed from its full pixel values, while the style
+        image is hashed only when provided. A ``None`` style contributes the
+        fixed reference-free marker ``no-reference`` to the key, and omitted
+        parameters are treated as an empty mapping so they do not alter the
+        resulting key beyond the method and image content.
+
+        Returns:
+            A colon-delimited cache key of the form
+            ``<content-hash>:<style-hash>:<method>:<params>``.
+        """
+        if params is None:
+            params = {}
+
+        content_hash, style_hash = self._compute_fingerprints(content, style)
+        return self._generate_key(content_hash, style_hash, method, params)
+
     def _generate_key(
         self,
         content_hash: str,
@@ -54,14 +80,21 @@ class StyleTransferCache:
         params_str = str(sorted(params.items()))
         return f"{content_hash}:{style_hash}:{method}:{params_str}"
 
+    def _compute_fingerprints(
+        self,
+        content: np.ndarray,
+        style: np.ndarray | None,
+    ) -> tuple[str, str]:
+        """Compute the content and style fingerprints for a cache lookup."""
+        return self._compute_hash(content), self._style_hash(style)
+
     def _compute_hash(self, img: np.ndarray) -> str:
         """
         Compute hash of image array.
 
-        Hashes a coarse fingerprint (shape, dtype, strides, and a
-        downsampled view of the pixel data) rather than the full image
-        bytes. The collision risk is negligible for the cache sizes this
-        module targets.
+        Hash the full image contents, including every pixel value, so any
+        content change produces a different cache key while preserving the
+        existing cache semantics.
 
         Args:
             img: Image array to hash
@@ -69,16 +102,13 @@ class StyleTransferCache:
         Returns:
             First 16 characters of MD5 hash
         """
-        stride = max(1, min(img.shape[0], img.shape[1]) // 64)
-        subsample = img[::stride, ::stride]
-        h = hashlib.md5()
+        h = hashlib.md5(usedforsecurity=False)
         h.update(str(img.shape).encode())
         h.update(str(img.dtype).encode())
-        h.update(str(img.strides).encode())
-        h.update(subsample.tobytes())
+        h.update(np.ascontiguousarray(img).tobytes(order="C"))
         return h.hexdigest()[:16]
 
-    def _style_hash(self, style: Optional[np.ndarray]) -> str:
+    def _style_hash(self, style: np.ndarray | None) -> str:
         """Hash the style image, or return the reference-free marker."""
         if style is None:
             return _NO_REFERENCE
@@ -87,10 +117,10 @@ class StyleTransferCache:
     def get(
         self,
         content: np.ndarray,
-        style: Optional[np.ndarray],
+        style: np.ndarray | None,
         method: str,
-        params: Optional[dict] = None,
-    ) -> Optional[np.ndarray]:
+        params: dict | None = None,
+    ) -> np.ndarray | None:
         """
         Retrieve cached styled image.
 
@@ -106,18 +136,14 @@ class StyleTransferCache:
         if params is None:
             params = {}
 
-        key = self._generate_key(
-            self._compute_hash(content),
-            self._style_hash(style),
-            method,
-            params,
-        )
+        content_hash, style_hash = self._compute_fingerprints(content, style)
+        key = self._generate_key(content_hash, style_hash, method, params)
 
         with self._lock:
             if key in self.cache:
                 self.cache.move_to_end(key)
                 self.hits += 1
-                return self.cache[key]
+                return self.cache[key].copy()
 
             self.misses += 1
             return None
@@ -125,10 +151,10 @@ class StyleTransferCache:
     def set(
         self,
         content: np.ndarray,
-        style: Optional[np.ndarray],
+        style: np.ndarray | None,
         method: str,
         styled: np.ndarray,
-        params: Optional[dict] = None,
+        params: dict | None = None,
     ) -> None:
         """
         Cache styled image with LRU eviction.
@@ -143,12 +169,8 @@ class StyleTransferCache:
         if params is None:
             params = {}
 
-        key = self._generate_key(
-            self._compute_hash(content),
-            self._style_hash(style),
-            method,
-            params,
-        )
+        content_hash, style_hash = self._compute_fingerprints(content, style)
+        key = self._generate_key(content_hash, style_hash, method, params)
 
         with self._lock:
             if key in self.cache:
@@ -156,12 +178,14 @@ class StyleTransferCache:
             elif len(self.cache) >= self.max_size:
                 self.cache.popitem(last=False)
 
-            self.cache[key] = styled
+            self.cache[key] = styled.copy()
 
     def clear(self) -> None:
-        """Clear all cached images."""
+        """Clear all cached images and reset hit/miss statistics."""
         with self._lock:
             self.cache.clear()
+            self.hits = 0
+            self.misses = 0
 
     def size(self) -> int:
         """
@@ -208,7 +232,7 @@ class StyleTransferCache:
             if key in self.cache:
                 self.cache.move_to_end(key)
                 self.hits += 1
-                return self.cache[key]
+                return self.cache[key].copy()
 
         value: np.ndarray = compute_func()
 
@@ -216,14 +240,13 @@ class StyleTransferCache:
             self.misses += 1
             if key in self.cache:
                 self.cache.move_to_end(key)
-                return self.cache[key]
+                return self.cache[key].copy()
 
             if len(self.cache) >= self.max_size:
                 self.cache.popitem(last=False)
 
-            self.cache[key] = value
+            self.cache[key] = value.copy()
             return value
 
 
-# Alias for backward compatibility
 LRUCache = StyleTransferCache

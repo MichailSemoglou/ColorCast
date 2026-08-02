@@ -47,7 +47,7 @@ class TestDaltonizerMethods:
     def test_all_daltonizers_registered(self):
         """All three daltonize_* methods are registered."""
         for deficiency in ("protanopia", "deuteranopia", "tritanopia"):
-            assert registry.has_method(f"daltonize_{deficiency}")
+            assert f"daltonize_{deficiency}" in registry.list_methods()
 
     def test_daltonizer_accepts_none_reference(self):
         """Daltonizer methods run with reference=None."""

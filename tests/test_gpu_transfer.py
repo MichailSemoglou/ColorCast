@@ -6,11 +6,12 @@ every function uses its CPU fallback, which is the common path in CI.
 
 import numpy as np
 import pytest
+
 from colorcast.processing.gpu_transfer import (
     gpu_histogram_matching,
-    gpu_mean_std_transfer,
-    gpu_lab_transfer,
     gpu_histogram_matching_multichannel,
+    gpu_lab_transfer,
+    gpu_mean_std_transfer,
     is_gpu_available,
 )
 
@@ -27,26 +28,26 @@ class TestGpuHistogramMatching:
     """Tests for GPU-accelerated histogram matching."""
 
     def test_basic_transfer(self):
-        source = (np.random.rand(100, 100, 3) * 255).astype(np.uint8)
-        reference = (np.random.rand(100, 100, 3) * 255).astype(np.uint8)
+        source = np.random.rand(100, 100, 3).astype(np.float32)
+        reference = np.random.rand(100, 100, 3).astype(np.float32)
         result = gpu_histogram_matching(source, reference)
         assert result.shape == source.shape
-        assert result.dtype == source.dtype
+        assert result.dtype == np.float32
 
-    def test_output_is_uint8(self):
+    def test_output_is_float32(self):
         source = (np.random.rand(50, 50, 3) * 255).astype(np.uint8)
         reference = (np.random.rand(50, 50, 3) * 255).astype(np.uint8)
         result = gpu_histogram_matching(source, reference)
-        assert result.dtype == np.uint8
+        assert result.dtype == np.float32
 
     def test_identical_images(self):
-        image = (np.random.rand(80, 80, 3) * 255).astype(np.uint8)
+        image = np.random.rand(80, 80, 3).astype(np.float32)
         result = gpu_histogram_matching(image, image)
         assert result.shape == image.shape
 
     def test_no_nan_no_inf(self):
-        source = (np.random.rand(50, 50, 3) * 255).astype(np.uint8)
-        reference = (np.random.rand(50, 50, 3) * 255).astype(np.uint8)
+        source = np.random.rand(50, 50, 3).astype(np.float32)
+        reference = np.random.rand(50, 50, 3).astype(np.float32)
         result = gpu_histogram_matching(source, reference)
         assert not np.any(np.isnan(result))
         assert not np.any(np.isinf(result))
@@ -160,19 +161,20 @@ class TestGpuHistogramMatchingMultichannel:
     """Tests for GPU-accelerated multichannel histogram matching."""
 
     def test_basic_transfer(self):
-        source = (np.random.rand(100, 100, 3) * 255).astype(np.uint8)
-        reference = (np.random.rand(100, 100, 3) * 255).astype(np.uint8)
+        source = np.random.rand(100, 100, 3).astype(np.float32)
+        reference = np.random.rand(100, 100, 3).astype(np.float32)
         result = gpu_histogram_matching_multichannel(source, reference)
         assert result.shape == source.shape
-
-    def test_identical_images(self):
-        image = (np.random.rand(80, 80, 3) * 255).astype(np.uint8)
-        result = gpu_histogram_matching_multichannel(image, image)
-        assert result.shape == image.shape
         assert result.dtype == np.float32
 
+    def test_identical_images(self):
+        image = np.random.rand(80, 80, 3).astype(np.float32)
+        result = gpu_histogram_matching_multichannel(image, image)
+        assert result.shape == image.shape
+        assert result.dtype == image.dtype
+
     def test_no_crash_on_small_inputs(self):
-        source = (np.random.rand(10, 10, 3) * 255).astype(np.uint8)
-        reference = (np.random.rand(5, 5, 3) * 255).astype(np.uint8)
+        source = np.random.rand(10, 10, 3).astype(np.float32)
+        reference = np.random.rand(5, 5, 3).astype(np.float32)
         result = gpu_histogram_matching_multichannel(source, reference)
         assert result.shape == source.shape

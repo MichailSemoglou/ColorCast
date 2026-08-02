@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+
 from colorcast.processing.curves import apply_curve
 
 

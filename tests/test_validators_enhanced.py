@@ -3,13 +3,15 @@
 import numpy as np
 import pytest
 from skimage import io
+
 from colorcast.processing.image_loader import normalize_to_float32
+from colorcast.utils.exceptions import ValidationError
 from colorcast.utils.validators_enhanced import (
+    ALLOWED_IMAGE_EXTENSIONS,
+    validate_file_path,
     validate_image_array,
     validate_image_file,
-    ALLOWED_IMAGE_EXTENSIONS,
 )
-from colorcast.utils.exceptions import ValidationError
 
 
 class TestSpoofedFileRejection:
@@ -116,3 +118,67 @@ class TestMalformedShapeRejection:
         assert result.shape == (4, 4, 3)
         assert result.dtype == np.float32
         np.testing.assert_allclose(result, 128 / 255, atol=0.01)
+
+
+class TestPathContainment:
+    """validate_file_path base-dir containment regression tests.
+
+    The old startswith-based check admitted sibling-prefix directories
+    (e.g. /data would allow /data-leaks). The relative_to-based check
+    must reject those.
+    """
+
+    def test_path_inside_base_dir_passes(self, tmp_path):
+        base = tmp_path / "data"
+        base.mkdir()
+        inside = base / "img.png"
+        inside.touch()
+
+        result = validate_file_path(str(inside), allowed_base_dirs=(base,))
+        assert result == inside.resolve()
+
+    def test_sibling_prefix_rejected(self, tmp_path):
+        """A sibling directory whose name is a prefix of the base is rejected."""
+        base = tmp_path / "data"
+        base.mkdir()
+        sibling = tmp_path / "data-leaks"
+        sibling.mkdir()
+        inside_sibling = sibling / "img.png"
+        inside_sibling.touch()
+
+        with pytest.raises(ValidationError, match="not within allowed"):
+            validate_file_path(str(inside_sibling), allowed_base_dirs=(base,))
+
+    def test_path_outside_base_rejected(self, tmp_path):
+        base = tmp_path / "data"
+        base.mkdir()
+        outside = tmp_path / "somewhere" / "img.png"
+        outside.parent.mkdir()
+        outside.touch()
+
+        with pytest.raises(ValidationError, match="not within allowed"):
+            validate_file_path(str(outside), allowed_base_dirs=(base,))
+
+    def test_multiple_base_dirs_first_fails_second_passes(self, tmp_path):
+        base_a = tmp_path / "a"
+        base_b = tmp_path / "b"
+        base_a.mkdir()
+        base_b.mkdir()
+        inside_b = base_b / "img.png"
+        inside_b.touch()
+
+        result = validate_file_path(
+            str(inside_b),
+            allowed_base_dirs=(base_a, base_b),
+        )
+        assert result == inside_b.resolve()
+
+    def test_path_traversal_rejected(self, tmp_path):
+        base = tmp_path / "data"
+        base.mkdir()
+        traversal = base / ".." / "outside.txt"
+        traversal.resolve().parent.mkdir(parents=True, exist_ok=True)
+        traversal.resolve().touch()
+
+        with pytest.raises(ValidationError, match="Path traversal"):
+            validate_file_path(str(traversal), allowed_base_dirs=(base,))

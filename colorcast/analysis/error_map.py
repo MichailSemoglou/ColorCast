@@ -35,12 +35,13 @@ from typing import NamedTuple
 
 import numpy as np
 from skimage import color as skcolor
-from colorcast.processing.image_loader import normalize_to_float32
 
+from colorcast.processing.image_loader import normalize_to_float32
 
 # ---------------------------------------------------------------------------
 # Public data class
 # ---------------------------------------------------------------------------
+
 
 class ErrorMap(NamedTuple):
     """Container returned by :func:`get_error_map`.
@@ -68,6 +69,12 @@ class ErrorMap(NamedTuple):
         pattern of ``chroma_error`` tells the corrector *where* and *how
         much* to shift hues.
 
+    chroma_error_dE00 : np.ndarray
+        Per-pixel CIEDE2000 color difference, shape (H, W), dtype float32.
+        Computed with L* set to 50 (mid-gray) so only chromaticity
+        contributes.  More perceptually uniform than the Euclidean
+        ``chroma_error``.  Range [0, ∞), typically ≤ 100.
+
     signed_chroma_ab : np.ndarray
         Signed (a*, b*) difference in Lab* space, shape (H, W, 2),
         dtype float32.  Needed if the correction is applied directly in Lab* rather
@@ -83,6 +90,7 @@ class ErrorMap(NamedTuple):
     signed: np.ndarray
     absolute: np.ndarray
     chroma_error: np.ndarray
+    chroma_error_dE00: np.ndarray
     signed_chroma_ab: np.ndarray
     orig_l_star: np.ndarray
 
@@ -91,9 +99,29 @@ class ErrorMap(NamedTuple):
 # Core analysis function
 # ---------------------------------------------------------------------------
 
+
+def _compute_chroma_error_dE00(orig_lab: np.ndarray, sim_lab: np.ndarray) -> np.ndarray:
+    """Compute CIEDE2000 chromaticity error from Lab* inputs.
+
+    Both ``orig_lab`` and ``sim_lab`` are expected to be arrays with shape
+    ``(H, W, 3)`` containing Lab* values in channel order ``(L*, a*, b*)``.
+    The function pins the L* channel to ``50`` for both inputs and computes the
+    CIEDE2000 distance from the resulting a* and b* values.  The returned
+    array has shape ``(H, W)`` and dtype ``float32``.
+    """
+    lab1 = np.empty(orig_lab.shape, dtype=np.float64)
+    lab2 = np.empty(sim_lab.shape, dtype=np.float64)
+    lab1[:, :, 0] = 50.0
+    lab2[:, :, 0] = 50.0
+    lab1[:, :, 1:] = orig_lab[:, :, 1:]
+    lab2[:, :, 1:] = sim_lab[:, :, 1:]
+    return skcolor.deltaE_ciede2000(lab1, lab2).astype(np.float32)
+
+
 def get_error_map(
     original_img: np.ndarray,
     simulated_img: np.ndarray,
+    compute_dE00: bool = False,
 ) -> ErrorMap:
     """Compute the full error analysis between *original_img* and *simulated_img*.
 
@@ -110,13 +138,19 @@ def get_error_map(
         The unmodified RGB image, shape (H, W, 3), any numeric dtype.
     simulated_img :
         The dichromat-simulated RGB image, shape (H, W, 3), any numeric dtype.
+    compute_dE00 : bool, default False
+        When ``True``, the returned :class:`ErrorMap` includes
+        ``chroma_error_dE00`` as a per-pixel ``(H, W)`` array of dtype
+        ``float32`` computed from the Lab* channels.  When ``False``, that
+        field is left unavailable as ``np.nan`` values so callers can still
+        unpack the result without a second code path.
 
     Returns
     -------
     ErrorMap
         Named tuple with ``signed``, ``absolute``, ``chroma_error``,
-        ``signed_chroma_ab``, and ``orig_l_star`` arrays.  See
-        :class:`ErrorMap` for details.
+        ``chroma_error_dE00``, ``signed_chroma_ab``, and ``orig_l_star``
+        arrays.  See :class:`ErrorMap` for details.
 
     Raises
     ------
@@ -136,16 +170,12 @@ def get_error_map(
     """
     # -- Input normalisation --------------------------------------------------
     orig = normalize_to_float32(np.asarray(original_img))
-    sim  = normalize_to_float32(np.asarray(simulated_img))
+    sim = normalize_to_float32(np.asarray(simulated_img))
 
     if orig.shape != sim.shape:
-        raise ValueError(
-            f"Shape mismatch: original {orig.shape} vs simulated {sim.shape}."
-        )
+        raise ValueError(f"Shape mismatch: original {orig.shape} vs simulated {sim.shape}.")
     if orig.ndim != 3 or orig.shape[2] != 3:
-        raise ValueError(
-            f"Expected (H, W, 3) images; got shape {orig.shape}."
-        )
+        raise ValueError(f"Expected (H, W, 3) images; got shape {orig.shape}.")
 
     # -- 1. Signed difference (RGB) ------------------------------------------
     # The direction is important: positive → original was stronger in that
@@ -170,16 +200,16 @@ def get_error_map(
     #     (a*, b*) chromaticity plane.
     #
     # Note: skimage.color.rgb2lab expects float32/float64 in [0, 1].
-    orig_lab = skcolor.rgb2lab(orig)   # (H, W, 3) float64
-    sim_lab  = skcolor.rgb2lab(sim)    # (H, W, 3) float64
+    orig_lab = skcolor.rgb2lab(orig)  # (H, W, 3) float64
+    sim_lab = skcolor.rgb2lab(sim)  # (H, W, 3) float64
 
     # Signed difference in Lab*: keep all three channels for signed_chroma_ab
-    diff_lab = orig_lab - sim_lab      # (H, W, 3)
+    diff_lab = orig_lab - sim_lab  # (H, W, 3)
 
     # Zero out L* — we explicitly ignore luminance change.
     # What remains in a* and b* is the pure chromatic information lost.
-    a_diff = diff_lab[:, :, 1].astype(np.float32)   # red–green axis loss
-    b_diff = diff_lab[:, :, 2].astype(np.float32)   # blue–yellow axis loss
+    a_diff = diff_lab[:, :, 1].astype(np.float32)  # red–green axis loss
+    b_diff = diff_lab[:, :, 2].astype(np.float32)  # blue–yellow axis loss
 
     signed_chroma_ab = np.stack([a_diff, b_diff], axis=-1)  # (H, W, 2)
 
@@ -191,7 +221,17 @@ def get_error_map(
     #     no correction needed.
     # Daltonization uses this map (or signed_chroma_ab) to decide where and how
     # strongly to boost colour contrasts.
-    chroma_error = np.sqrt(a_diff ** 2 + b_diff ** 2)  # (H, W) float32
+    chroma_error = np.sqrt(a_diff**2 + b_diff**2)  # (H, W) float32
+
+    # -- CIEDE2000 chromaticity error -----------------------------------------
+    # Compute dE00 with L* pinned to 50 to isolate chromaticity contribution.
+    # By default this optional output is disabled, so the result contains
+    # NaN values instead of a computed metric.
+    chroma_error_dE00 = (
+        _compute_chroma_error_dE00(orig_lab, sim_lab)
+        if compute_dE00
+        else np.full(chroma_error.shape, np.nan, dtype=np.float32)
+    )
 
     # Cache the original L* channel so downstream callers can
     # restore luminance without recomputing rgb2lab on the original image.
@@ -201,6 +241,7 @@ def get_error_map(
         signed=signed,
         absolute=absolute,
         chroma_error=chroma_error,
+        chroma_error_dE00=chroma_error_dE00,
         signed_chroma_ab=signed_chroma_ab,
         orig_l_star=orig_l_star,
     )
@@ -209,6 +250,7 @@ def get_error_map(
 # ---------------------------------------------------------------------------
 # Visualisation helpers
 # ---------------------------------------------------------------------------
+
 
 def plot_error_heatmap(
     error_map: ErrorMap,
@@ -260,7 +302,7 @@ def plot_error_heatmap(
     # -- Optional: show original and simulated --------------------------------
     if show_images:
         orig_disp = normalize_to_float32(np.asarray(original_img, dtype=np.float32))
-        sim_disp  = normalize_to_float32(np.asarray(simulated_img, dtype=np.float32))
+        sim_disp = normalize_to_float32(np.asarray(simulated_img, dtype=np.float32))
 
         axes[col].imshow(orig_disp)
         axes[col].set_title("Original", fontsize=11)
@@ -315,8 +357,8 @@ def summarize_error_map(error_map: ErrorMap) -> dict[str, float]:
     ab = error_map.absolute.sum(axis=2)
     return {
         "mean_chroma_error": float(ce.mean()),
-        "max_chroma_error":  float(ce.max()),
-        "p95_chroma_error":  float(np.percentile(ce, 95)),
-        "mean_rgb_error":    float(ab.mean()),
-        "max_rgb_error":     float(ab.max()),
+        "max_chroma_error": float(ce.max()),
+        "p95_chroma_error": float(np.percentile(ce, 95)),
+        "mean_rgb_error": float(ab.mean()),
+        "max_rgb_error": float(ab.max()),
     }

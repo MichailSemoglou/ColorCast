@@ -3,21 +3,35 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
 from colorcast import (
-    load_image,
-    save_image,
     blend_images,
+    load_image,
     registry,
+    save_image,
 )
 from colorcast.processing.batch import BatchProcessor
 from colorcast.processing.image_loader import ALLOWED_IMAGE_EXTENSIONS
+from colorcast.utils.exceptions import ImageProcessingError, ValidationError
 
 
-def parse_args():
+def _validate_intensity(value: str) -> float:
+    """argparse type validator for --intensity (float in [0, 1])."""
+    from colorcast.utils.validators_enhanced import validate_float_parameter
+
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError(f"invalid float value: {value!r}") from None
+    try:
+        return validate_float_parameter(f, "intensity", 0.0, 1.0)
+    except ValidationError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
+
+def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         prog="colorcast",
@@ -44,10 +58,25 @@ Examples:
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
+    # --verbose is available on the top-level parser and every subcommand,
+    # so that both `colorcast --verbose transfer ...` and
+    # `colorcast transfer --verbose ...` work.
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show traceback on errors",
+    )
+
     # Transfer command
     transfer_parser = subparsers.add_parser(
         "transfer",
         help="Apply color transfer between two images",
+    )
+    transfer_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Show traceback on errors",
     )
     transfer_parser.add_argument(
         "content",
@@ -77,7 +106,7 @@ Examples:
     transfer_parser.add_argument(
         "-i",
         "--intensity",
-        type=float,
+        type=_validate_intensity,
         default=1.0,
         help="Blend intensity 0.0-1.0 (default: 1.0)",
     )
@@ -98,6 +127,12 @@ Examples:
     batch_parser = subparsers.add_parser(
         "batch",
         help="Batch process multiple images",
+    )
+    batch_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Show traceback on errors",
     )
     batch_parser.add_argument(
         "content_dir",
@@ -158,7 +193,16 @@ Examples:
     return parser.parse_args()
 
 
-def cmd_transfer(args):
+def _ensure_style_image(method_id: str, style_arg: Path | None, requires_reference: bool) -> None:
+    """Raise ValueError if a style image is required but not provided."""
+    if requires_reference and style_arg is None:
+        raise ValueError(
+            f"Method '{method_id}' requires a style image. "
+            "Pass one as the second positional argument."
+        )
+
+
+def cmd_transfer(args: argparse.Namespace) -> None:
     """Handle transfer command."""
     method = registry.get_method(args.method)
 
@@ -166,24 +210,29 @@ def cmd_transfer(args):
     content = load_image(str(args.content))
 
     if method.requires_reference:
-        if args.style is None:
-            raise ValueError(
-                f"Method '{args.method}' requires a style image. "
-                "Pass one as the second positional argument."
-            )
+        _ensure_style_image(args.method, args.style, True)
         print(f"Loading style image: {args.style}")
-        style: Optional[np.ndarray] = load_image(str(args.style))
+        style: np.ndarray | None = load_image(str(args.style))
     else:
         # Simulator methods transform the content image alone.
         style = None
 
     print(f"Applying {args.method} transfer...")
-    result = method.transfer(
-        content,
-        style,
-        shadow_threshold=args.shadow_threshold,
-        highlight_threshold=args.highlight_threshold,
-    )
+
+    # Build kwargs from the subset of CLI args that the method declares.
+    # This prevents passing unrelated parameters to reference-free methods
+    # (simulators, Daltonizers) whose transfer() signatures would break if
+    # they ever stopped accepting **kwargs blindly.
+    #
+    # Intensity is handled by the post-transfer blend step below, not
+    # forwarded as a method parameter.
+    _param_map = {
+        "shadow_threshold": args.shadow_threshold,
+        "highlight_threshold": args.highlight_threshold,
+    }
+    kwargs = {k: v for k, v in _param_map.items() if k in method.parameters}
+
+    result = method.transfer(content, style, **kwargs)
 
     # Apply intensity blending
     if args.intensity < 1.0:
@@ -198,7 +247,7 @@ def cmd_transfer(args):
     print("Transfer complete!")
 
 
-def cmd_batch(args):
+def cmd_batch(args: argparse.Namespace) -> None:
     """Handle batch command."""
     print("Starting batch processing...")
     print(f"Content directory: {args.content_dir}")
@@ -209,18 +258,13 @@ def cmd_batch(args):
     method = registry.get_method(args.method)
 
     if method.requires_reference:
-        if args.style is None:
-            raise ValueError(
-                f"Method '{args.method}' requires a style image. "
-                "Pass one as the second positional argument."
-            )
-        style_image: Optional[Path] = args.style
+        _ensure_style_image(args.method, args.style, True)
+        style_image: Path | None = args.style
     else:
-        # Simulator methods transform each content image alone.
         style_image = None
 
     # Progress callback
-    def progress_callback(processed, total):
+    def progress_callback(processed: int, total: int) -> None:
         percent = (processed / total) * 100
         print(f"Progress: {processed}/{total} ({percent:.1f}%)")
 
@@ -249,7 +293,7 @@ def cmd_batch(args):
             print(f"  ... and {len(processor.failed_files) - 5} more")
 
 
-def cmd_list_methods():
+def cmd_list_methods() -> None:
     """Handle list-methods command."""
     print("Available transfer methods:")
     print("-" * 50)
@@ -262,24 +306,23 @@ def cmd_list_methods():
     print(f"Total: {len(methods)} methods")
 
 
-def cmd_info(args):
+def cmd_info(args: argparse.Namespace) -> None:
     """Handle info command."""
-    from colorcast import __version__, __author__, __license__
+    from colorcast import __author__, __license__, __version__
 
-    print("ColorCast - Advanced Color Transfer Suite")
+    print("ColorCast — color and style transfer between images.")
     print("-" * 50)
 
-    if args.version:
-        print(f"Version: {__version__}")
-        print(f"Author: {__author__}")
-        print(f"License: {__license__}")
-    else:
-        print("ColorCast is a sophisticated toolkit for color and")
-        print("style transfer between images.")
+    if not args.version:
+        print("ColorCast provides style transfer, CVD simulation,")
+        print("Daltonization correction, and analysis tools.")
         print()
-        print(f"Version: {__version__}")
-        print(f"Author: {__author__}")
-        print(f"License: {__license__}")
+
+    print(f"Version: {__version__}")
+    print(f"Author: {__author__}")
+    print(f"License: {__license__}")
+
+    if not args.version:
         print()
         print("Supported image formats:")
         for ext in ALLOWED_IMAGE_EXTENSIONS:
@@ -289,13 +332,13 @@ def cmd_info(args):
         print("Visit https://github.com/MichailSemoglou/ColorCast for more info.")
 
 
-def main():
+def main() -> None:
     """Main entry point for CLI."""
     args = parse_args()
 
     if not args.command:
-        print("Error: No command specified")
-        print("Use 'colorcast --help' for usage information")
+        print("Error: No command specified", file=sys.stderr)
+        print("Use 'colorcast --help' for usage information", file=sys.stderr)
         sys.exit(1)
 
     try:
@@ -308,17 +351,25 @@ def main():
         elif args.command == "info":
             cmd_info(args)
         else:
-            print(f"Error: Unknown command '{args.command}'")
+            print(f"Error: Unknown command '{args.command}'", file=sys.stderr)
             sys.exit(1)
-    except Exception as e:
-        print(f"Error: {e}")
-        import traceback
+    except (ValueError, FileNotFoundError, ValidationError, ImageProcessingError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        if getattr(args, "verbose", False):
+            import traceback
 
-        traceback.print_exc()
-        sys.exit(1)
+            traceback.print_exc(file=sys.stderr)
+        sys.exit(2)
+    except Exception:  # noqa: BLE001 — last-resort handler; prints a generic message to stderr
+        print("Error: An unexpected internal error occurred.", file=sys.stderr)
+        if getattr(args, "verbose", False):
+            import traceback
+
+            traceback.print_exc(file=sys.stderr)
+        sys.exit(3)
 
 
-def gui_main():
+def gui_main() -> None:
     """Main entry point for the graphical interface."""
     import argparse
 

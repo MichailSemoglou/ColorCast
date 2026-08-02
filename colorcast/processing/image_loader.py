@@ -16,16 +16,50 @@ Data structures
   channel count before normalization.
 """
 
+import logging
+import os
 from pathlib import Path
-from typing import NamedTuple, Optional, Tuple
+from typing import NamedTuple
+
 import numpy as np
-from skimage import io, img_as_float, transform
+from skimage import img_as_float, io, transform
+
+from colorcast.utils.exceptions import ImageLoadError, InvalidImageFormatError, ValidationError
 from colorcast.utils.validators_enhanced import (
-    validate_image_file,
-    validate_image_array,
     ALLOWED_IMAGE_EXTENSIONS,
+    validate_image_array,
+    validate_image_file,
 )
-from colorcast.utils.exceptions import ImageLoadError, InvalidImageFormatError
+
+logger = logging.getLogger(__name__)
+
+_MAX_FILE_BYTES = 200_000_000  # 200 MB
+
+
+def _get_image_dimensions(filepath: str) -> tuple[int, int]:
+    """Return ``(width, height)`` from the image header without decoding pixels.
+
+    Uses PIL if available; falls back to ``skimage.io.imread`` (which allocates
+    the full array) and then discards it.
+
+    Returns:
+        (width, height) in pixels
+    """
+    try:
+        from PIL import Image as _PILImage
+    except ImportError:
+        arr = io.imread(filepath)
+        return (arr.shape[1], arr.shape[0])
+    try:
+        with _PILImage.open(filepath) as img:
+            return img.size  # (width, height)
+    except (OSError, ValueError):
+        arr = io.imread(filepath)
+        return (arr.shape[1], arr.shape[0])
+    except Exception:
+        logger.warning("PIL header read failed for %r; falling back to full decode", filepath)
+        arr = io.imread(filepath)
+        return (arr.shape[1], arr.shape[0])
 
 
 class ImageMeta(NamedTuple):
@@ -83,9 +117,7 @@ def ensure_rgb(img: np.ndarray) -> np.ndarray:
                 composited = np.round(composited * maxval)
             return composited.astype(img.dtype)
         else:
-            raise InvalidImageFormatError(
-                f"Unsupported number of channels: {img.shape[2]}"
-            )
+            raise InvalidImageFormatError(f"Unsupported number of channels: {img.shape[2]}")
     else:
         raise InvalidImageFormatError(f"Unsupported image dimensions: {img.ndim}")
 
@@ -138,8 +170,8 @@ def normalize_to_float32(array: np.ndarray) -> np.ndarray:
 
 
 def load_image_with_meta(
-    path: str, max_pixels: int = 50000000, max_dimension: Optional[int] = None
-) -> Tuple[np.ndarray, "ImageMeta"]:
+    path: str, max_pixels: int = 50000000, max_dimension: int | None = None
+) -> tuple[np.ndarray, "ImageMeta"]:
     """
     Load and validate an image file, returning the array and original format metadata.
 
@@ -163,12 +195,23 @@ def load_image_with_meta(
     """
     validate_image_file(path, ALLOWED_IMAGE_EXTENSIONS)
 
+    file_bytes = os.path.getsize(path)
+    if file_bytes > _MAX_FILE_BYTES:
+        raise ValidationError(f"File too large: {file_bytes:,} bytes (max {_MAX_FILE_BYTES:,})")
+
+    width, height = _get_image_dimensions(path)
+    total_pixels = width * height
+    if total_pixels > max_pixels:
+        raise ValidationError(
+            f"Image too large: {width}×{height} = {total_pixels:,} pixels " f"(max {max_pixels:,})"
+        )
+
     try:
         img = img_as_float(io.imread(path))
-    except IOError as e:
-        raise ImageLoadError(f"Failed to read image file: {e}")
+    except OSError as e:
+        raise ImageLoadError(f"Failed to read image file: {e}") from e
     except Exception as e:
-        raise ImageLoadError(f"Unexpected error loading image: {e}")
+        raise ImageLoadError(f"Unexpected error loading image: {e}") from e
 
     meta = ImageMeta(
         original_ndim=img.ndim,
@@ -182,16 +225,14 @@ def load_image_with_meta(
         if max(h, w) > max_dimension:
             scale = max_dimension / max(h, w)
             new_h, new_w = int(h * scale), int(w * scale)
-            img = transform.resize(
-                img, (new_h, new_w), anti_aliasing=True, preserve_range=True
-            )
+            img = transform.resize(img, (new_h, new_w), anti_aliasing=True, preserve_range=True)
 
     validate_image_array(img, max_pixels=max_pixels)
     return img, meta
 
 
 def load_image(
-    path: str, max_pixels: int = 50000000, max_dimension: Optional[int] = None
+    path: str, max_pixels: int = 50000000, max_dimension: int | None = None
 ) -> np.ndarray:
     """
     Load and validate an image file.
@@ -235,6 +276,7 @@ def save_image(img_array: np.ndarray, path: str) -> None:
     path_obj = Path(path)
     if path_obj.suffix.lower() not in ALLOWED_IMAGE_EXTENSIONS:
         from colorcast.utils.exceptions import ValidationError
+
         raise ValidationError(
             f"Invalid file extension. Allowed: {', '.join(ALLOWED_IMAGE_EXTENSIONS)}"
         )
@@ -257,4 +299,4 @@ def save_image(img_array: np.ndarray, path: str) -> None:
     try:
         io.imsave(path, save_img)
     except Exception as e:
-        raise ImageProcessingError(f"Failed to save image: {e}")
+        raise ImageProcessingError(f"Failed to save image: {e}") from e

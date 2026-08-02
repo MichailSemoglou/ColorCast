@@ -9,6 +9,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+docs/_build/
 develop-eggs/
 dist/
 downloads/
@@ -93,3 +94,16 @@ softwareX/
 
 # Kilo local configuration
 /kilo.json
+# Image files (test output, not committed)
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tif
+*.tiff
+*.gif
+*.webp
+
+# README reference images are tracked
+!/imgs/
+!/imgs/**

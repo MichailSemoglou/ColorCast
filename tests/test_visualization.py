@@ -1,17 +1,18 @@
 """Tests for visualization functions."""
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
 import numpy as np
 import pytest
 from matplotlib.figure import Figure
+
 from colorcast.analysis.visualization import (
-    visualize_transfer_result,
-    visualize_method_comparison,
-    visualize_color_channels,
     create_side_by_side_comparison,
+    visualize_color_channels,
+    visualize_method_comparison,
+    visualize_transfer_result,
 )
 
 
@@ -41,39 +42,62 @@ class TestVisualizeTransferResult:
     def test_default_no_histograms_no_difference(self, images):
         source, reference, result = images
         fig = visualize_transfer_result(
-            source, reference, result, "Test",
+            source,
+            reference,
+            result,
+            "Test",
             show_histograms=False,
             show_difference=False,
         )
+        assert isinstance(fig, Figure)
+        plt.close(fig)
 
     def test_default_with_difference(self, images):
         source, reference, result = images
         fig = visualize_transfer_result(
-            source, reference, result, "Test",
+            source,
+            reference,
+            result,
+            "Test",
             show_histograms=False,
             show_difference=True,
         )
+        assert isinstance(fig, Figure)
+        plt.close(fig)
 
     def test_with_histograms_no_difference(self, images):
         source, reference, result = images
         fig = visualize_transfer_result(
-            source, reference, result, "Test",
+            source,
+            reference,
+            result,
+            "Test",
             show_histograms=True,
             show_difference=False,
         )
+        assert isinstance(fig, Figure)
+        plt.close(fig)
 
     def test_with_histograms_and_difference(self, images):
         source, reference, result = images
         fig = visualize_transfer_result(
-            source, reference, result, "Test",
+            source,
+            reference,
+            result,
+            "Test",
             show_histograms=True,
             show_difference=True,
         )
+        assert isinstance(fig, Figure)
+        plt.close(fig)
 
     def test_custom_figsize(self, images):
         source, reference, result = images
         fig = visualize_transfer_result(
-            source, reference, result, "Test",
+            source,
+            reference,
+            result,
+            "Test",
             figsize=(10, 8),
         )
         assert isinstance(fig, Figure)
@@ -83,7 +107,10 @@ class TestVisualizeTransferResult:
     def test_all_combinations(self, images, show_histograms, show_difference):
         source, reference, result = images
         fig = visualize_transfer_result(
-            source, reference, result, "Test",
+            source,
+            reference,
+            result,
+            "Test",
             show_histograms=show_histograms,
             show_difference=show_difference,
         )
@@ -137,7 +164,7 @@ class TestVisualizeColorChannels:
 
     def test_custom_title(self):
         image = np.random.rand(100, 100, 3).astype(np.float32)
-        fig = visualize_color_channels(image, title="Custom Title")
+        visualize_color_channels(image, title="Custom Title")
 
     def test_custom_figsize(self):
         image = np.random.rand(100, 100, 3).astype(np.float32)
@@ -158,7 +185,10 @@ class TestCreateSideBySideComparison:
         img1 = np.random.rand(100, 100, 3).astype(np.float32)
         img2 = np.random.rand(100, 100, 3).astype(np.float32)
         fig = create_side_by_side_comparison(
-            img1, img2, label1="Original", label2="Styled",
+            img1,
+            img2,
+            label1="Original",
+            label2="Styled",
         )
         assert isinstance(fig, Figure)
 

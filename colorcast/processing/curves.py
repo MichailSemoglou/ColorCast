@@ -1,10 +1,14 @@
 """Tone curve utilities for color transfer."""
 
 from typing import Literal
+
 import numpy as np
 
 
-def apply_curve(values: np.ndarray, curve_type: Literal["linear", "s-curve", "contrast"] = "linear") -> np.ndarray:
+def apply_curve(
+    values: np.ndarray,
+    curve_type: Literal["linear", "s-curve", "contrast"] = "linear",
+) -> np.ndarray:
     """
     Apply tone curve to values.
 
