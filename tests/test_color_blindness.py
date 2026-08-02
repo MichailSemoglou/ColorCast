@@ -157,12 +157,10 @@ class TestErrorMap:
         error_map_default = get_error_map(rgb_image, simulated)
         error_map_enabled = get_error_map(rgb_image, simulated, compute_dE00=True)
 
-        assert error_map_default.chroma_error_dE00.shape == rgb_image.shape[:2]
+        assert error_map_default.chroma_error_dE00 is None
         assert error_map_enabled.chroma_error_dE00.shape == rgb_image.shape[:2]
-        assert error_map_default.chroma_error_dE00.dtype == np.float32
         assert error_map_enabled.chroma_error_dE00.dtype == np.float32
-        assert np.isnan(error_map_default.chroma_error_dE00).all()
-        assert np.all(np.isfinite(error_map_enabled.chroma_error_dE00))
+        assert np.isfinite(error_map_enabled.chroma_error_dE00).all()
         assert np.all(error_map_enabled.chroma_error_dE00 >= 0.0)
 
         identical = np.array([[[0.2, 0.1, 0.3]]], dtype=np.float32)

@@ -17,7 +17,7 @@
 - **Selective Regional Transfer** - Target shadows, midtones, or highlights specifically
 - **Modular Package** - Use as Python API or run GUI/CLI
 - **Performance Optimized** - LRU caching and batch processing support
-- **Tested** - 75% test coverage with 359 passing tests
+- **Tested** - 75% test coverage with 361 passing tests
 - **Documented** - API documentation and examples
 - **Plugin Architecture** - Easy to add custom transfer methods
 
@@ -330,7 +330,7 @@ pytest tests/test_transfer_methods.py
 pytest -v
 ```
 
-**Test Coverage:** 75% (359 passing, 1 skipped)
+**Test Coverage:** 75% (361 passing, 1 skipped)
 
 - Core transfer methods: 100% coverage
 - Full test suite including integration, performance, and property-based tests

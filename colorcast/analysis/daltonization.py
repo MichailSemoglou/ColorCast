@@ -25,8 +25,8 @@ is rotated into the surviving chromatic axis:
   (a*) channel.
 
 Correction is spatially weighted by the chromaticity error map so
-low-error pixels remain largely unchanged, and the original L* channel is
-restored to prevent brightness drift.
+low-error pixels remain largely unchanged, and ``base_lab[:, :, 0]`` is
+preserved to prevent brightness drift.
 
 For the color-vision science behind this module, see the project wiki:
 "Color-Vision Background".

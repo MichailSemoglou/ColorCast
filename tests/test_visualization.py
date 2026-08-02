@@ -164,7 +164,8 @@ class TestVisualizeColorChannels:
 
     def test_custom_title(self):
         image = np.random.rand(100, 100, 3).astype(np.float32)
-        visualize_color_channels(image, title="Custom Title")
+        fig = visualize_color_channels(image, title="Custom Title")
+        assert isinstance(fig, Figure)
 
     def test_custom_figsize(self):
         image = np.random.rand(100, 100, 3).astype(np.float32)

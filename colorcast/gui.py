@@ -75,12 +75,23 @@ def _run_in_thread(
     from threading import Thread
 
     signals = _WorkerSignals()
+    _ref: list[_WorkerSignals] = [signals]  # keep alive until signal is delivered
+
     if on_done is not None:
-        signals.finished.connect(on_done)
+
+        def _on_done() -> None:
+            on_done()
+            _ref.clear()
+
+        signals.finished.connect(_on_done)
+    else:
+        signals.finished.connect(_ref.clear)
 
     def _worker() -> None:
-        target()
-        signals.finished.emit()
+        try:
+            target()
+        finally:
+            signals.finished.emit()
 
     Thread(target=_worker, daemon=True).start()
 

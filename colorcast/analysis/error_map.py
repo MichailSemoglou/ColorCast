@@ -69,12 +69,6 @@ class ErrorMap(NamedTuple):
         pattern of ``chroma_error`` tells the corrector *where* and *how
         much* to shift hues.
 
-    chroma_error_dE00 : np.ndarray
-        Per-pixel CIEDE2000 color difference, shape (H, W), dtype float32.
-        Computed with L* set to 50 (mid-gray) so only chromaticity
-        contributes.  More perceptually uniform than the Euclidean
-        ``chroma_error``.  Range [0, ∞), typically ≤ 100.
-
     signed_chroma_ab : np.ndarray
         Signed (a*, b*) difference in Lab* space, shape (H, W, 2),
         dtype float32.  Needed if the correction is applied directly in Lab* rather
@@ -82,17 +76,23 @@ class ErrorMap(NamedTuple):
 
     orig_l_star : np.ndarray
         The L* (lightness) channel of the *original* image in CIE Lab* space,
-        shape (H, W), dtype float32.  Cached here so that
-        :func:`~colorcast.analysis.daltonization.apply_daltonization` can
-        restore original luminance without recomputing ``rgb2lab(original)``.
+        shape (H, W), dtype float32.  Cached here for consumers that need the
+        original lightness without recomputing ``rgb2lab(original)``.
+
+    chroma_error_dE00 : np.ndarray or None
+        Per-pixel CIEDE2000 color difference, shape (H, W), dtype float32.
+        Computed with L* set to 50 (mid-gray) so only chromaticity
+        contributes.  More perceptually uniform than the Euclidean
+        ``chroma_error``.  Range [0, ∞), typically ≤ 100.
+        Set to ``None`` when ``compute_dE00=False``.
     """
 
     signed: np.ndarray
     absolute: np.ndarray
     chroma_error: np.ndarray
-    chroma_error_dE00: np.ndarray
     signed_chroma_ab: np.ndarray
     orig_l_star: np.ndarray
+    chroma_error_dE00: np.ndarray | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -227,14 +227,10 @@ def get_error_map(
     # Compute dE00 with L* pinned to 50 to isolate chromaticity contribution.
     # By default this optional output is disabled, so the result contains
     # NaN values instead of a computed metric.
-    chroma_error_dE00 = (
-        _compute_chroma_error_dE00(orig_lab, sim_lab)
-        if compute_dE00
-        else np.full(chroma_error.shape, np.nan, dtype=np.float32)
-    )
+    chroma_error_dE00 = _compute_chroma_error_dE00(orig_lab, sim_lab) if compute_dE00 else None
 
-    # Cache the original L* channel so downstream callers can
-    # restore luminance without recomputing rgb2lab on the original image.
+    # Cache the original L* channel for callers that need it
+    # without recomputing rgb2lab on the original image.
     orig_l_star = orig_lab[:, :, 0].astype(np.float32)  # (H, W)
 
     return ErrorMap(

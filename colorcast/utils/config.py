@@ -100,6 +100,8 @@ class ColorCastConfig:
 
         resolved = Path(path) if path is not None else cls.get_config_path()
         raw = json.loads(resolved.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise TypeError(f"Expected a JSON object in {resolved}, " f"got {type(raw).__name__}")
         known_fields = {f.name: f for f in fields(cls)}
         field_types = get_type_hints(cls)
         filtered: dict[str, Any] = {}

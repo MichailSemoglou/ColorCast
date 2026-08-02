@@ -41,7 +41,7 @@
 - All CLI functions in `__main__.py` now have return type annotations (`-> None` or `-> argparse.Namespace`); error `print()` calls route to `stderr`.
 - Remaining broad `except Exception` blocks (`gui.py:235`, `gui.py:353`, `gui.py:401`, `__main__.py:362`, `comparison.py:174`) now carry `# noqa: BLE001` with a one-line justification, matching the convention in `batch.py`.
 - `validate_and_resize_images` return annotation tightened from bare `tuple` to `tuple[np.ndarray, np.ndarray]` (`colorcast/processing/transfer_methods.py:47`).
-- README test metrics updated to match current suite output: 75% coverage, 359 passed, 1 skipped.
+- README test metrics updated to match current suite output: 75% coverage, 361 passed, 1 skipped.
 
 ### Fixed
 

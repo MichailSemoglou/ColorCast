@@ -65,6 +65,9 @@ def compute_dashboard(
     Returns:
         :class:`DashboardResult`
     """
+    from colorcast.processing.image_loader import normalize_to_float32
+
+    image_array = normalize_to_float32(image_array)
     simulator = ColorBlindSimulator()
 
     def _simulate_and_map(deficiency: str) -> tuple[str, np.ndarray, ErrorMap, dict[str, float]]:
@@ -97,6 +100,13 @@ def compute_dashboard(
 def _summarize(em: ErrorMap) -> dict[str, float]:
     """Derive scalar summary statistics from an ErrorMap."""
     ce = em.chroma_error_dE00
+    if ce is None:
+        return {
+            "mean_error": float("nan"),
+            "median_error": float("nan"),
+            "p95_error": float("nan"),
+            "percent_affected": float("nan"),
+        }
     return {
         "mean_error": float(np.mean(ce)),
         "median_error": float(np.median(ce)),
