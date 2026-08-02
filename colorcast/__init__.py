@@ -23,9 +23,6 @@ __author__ = "Michail Semoglou"
 __email__ = "m.semoglou@tongji.edu.cn"
 __license__ = "MIT"
 
-from colorcast.analysis.comparison import MethodComparison
-from colorcast.analysis.daltonization import daltonize
-from colorcast.analysis.error_map import ErrorMap, get_error_map
 from colorcast.processing.blending import blend_images
 from colorcast.processing.curves import apply_curve
 from colorcast.processing.image_loader import ensure_rgb, load_image, save_image
@@ -39,6 +36,25 @@ from colorcast.processing.transfer_methods import (
     selective_color_transfer,
 )
 from colorcast.utils.config import ColorCastConfig
+
+_LAZY_IMPORTS: dict[str, str] = {
+    "MethodComparison": "colorcast.analysis.comparison",
+    "daltonize": "colorcast.analysis.daltonization",
+    "ErrorMap": "colorcast.analysis.error_map",
+    "get_error_map": "colorcast.analysis.error_map",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_IMPORTS:
+        import importlib
+
+        mod = importlib.import_module(_LAZY_IMPORTS[name])
+        attr = getattr(mod, name)
+        globals()[name] = attr
+        return attr
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "load_image",
