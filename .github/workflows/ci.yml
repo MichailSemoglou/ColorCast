@@ -58,7 +58,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install system dependencies (Qt headless)
         if: runner.os == 'Linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libegl1-mesa libxkbcommon-x11-0
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libegl1 libxkbcommon-x11-0
       - name: Install project with dev and analysis extras
         run: pip install -e ".[dev,analysis]"
       - name: Run tests
