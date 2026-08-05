@@ -250,7 +250,7 @@ class ICtCpSpace(AppearanceSpace):
         if self.transfer_function == "srgb":
             linear = srgb_to_linear(rgb)
         else:
-            linear = np.asarray(rgb, dtype=np.float64)
+            linear = np.array(rgb, dtype=np.float64, copy=True)
         linear *= self.peak_luminance  # [0, 1] → absolute cd/m²
         h, w = linear.shape[:2]
         flat = linear.reshape(-1, 3)

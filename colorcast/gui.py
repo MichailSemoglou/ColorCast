@@ -203,7 +203,7 @@ QComboBox::drop-down {
     width: 26px;
 }
 QComboBox::down-arrow {
-    image: url(@CHEVRON_DOWN@);
+    image: url("@CHEVRON_DOWN@");
     width: 12px;
     height: 12px;
 }
@@ -244,7 +244,7 @@ QToolTip {
 }
 """
 
-_APP_STYLESHEET = _STYLESHEET_TEMPLATE.replace("@CHEVRON_DOWN@", _CHEVRON_PATH)
+_APP_STYLESHEET = _STYLESHEET_TEMPLATE.replace("@CHEVRON_DOWN@", f'url("{_CHEVRON_PATH}")')
 
 
 def _caption_label(text: str, *, align_right: bool = False) -> QLabel:
@@ -926,7 +926,8 @@ class DashboardDialog(QDialog):
         metric_caption = _caption_label("ΔE METRIC")
         button_layout.addWidget(metric_caption)
         self._appearance_combo = QComboBox(self)
-        self._appearance_combo.addItems(["CIELAB (legacy)", "ICtCp (HDR, BT.2100)"])
+        self._appearance_combo.addItem("CIELAB (legacy)", "cielab")
+        self._appearance_combo.addItem("ICtCp (HDR, BT.2100)", "ictcp")
         self._appearance_combo.setCurrentIndex(0)
         self._appearance_combo.currentIndexChanged.connect(self._restart_computation)
         button_layout.addWidget(self._appearance_combo)
@@ -952,12 +953,14 @@ class DashboardDialog(QDialog):
         if self._report_button is not None:
             self._report_button.setEnabled(False)
 
-        # Map combobox text to appearance space name for the factory.
-        # This avoids brittle index arithmetic if we add more spaces later.
-        combo_text = (
-            self._appearance_combo.currentText() if self._appearance_combo is not None else "CIELAB"
-        )
-        space_name = "ictcp" if "ICtCp" in combo_text else "cielab"
+        # Read appearance space id from combo box item data.  Falls back
+        # to "cielab" when no combo box is present (should not happen in
+        # practice, but is safe).
+        space_name: str = "cielab"
+        if self._appearance_combo is not None:
+            data = self._appearance_combo.currentData()
+            if data is not None:
+                space_name = str(data)
         appearance = make_appearance_space(space_name)
 
         result: DashboardResult | None = None

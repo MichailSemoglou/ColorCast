@@ -92,6 +92,8 @@ def _get_image_dimensions(filepath: str, max_pixels: int | None = None) -> tuple
                     return img.size  # (width, height)
             except _PILImage.DecompressionBombError:
                 raise
+            except _PILImage.DecompressionBombWarning as e:
+                raise _PILImage.DecompressionBombError(str(pixel_limit)) from e
             except (OSError, ValueError):
                 pass
             except Exception:
