@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from colorcast.analysis.appearance import AppearanceSpace
 from colorcast.analysis.error_map import ErrorMap, get_error_map
 from colorcast.processing.simulation import ColorBlindSimulator
 
@@ -26,6 +27,11 @@ _DEFICIENCY_LABELS: dict[str, str] = {
     "deuteranopia": "Deuteranopia (green-blind)",
     "tritanopia": "Tritanopia (blue-blind)",
 }
+
+
+def _heatmap_title(deficiency: str, metric_label: str) -> str:
+    """Return the display title for a dashboard heatmap."""
+    return f"{metric_label} ({deficiency[0].upper()})"
 
 
 @dataclass
@@ -50,10 +56,22 @@ class DashboardResult:
     error_maps: dict[str, ErrorMap]
     summary: dict[str, dict[str, float]]
 
+    @property
+    def metric_label(self) -> str:
+        """Human-readable label for the ΔE metric used in this dashboard.
+
+        Reads ``appearance_delta_name`` from the first error map. Returns
+        ``"CIEDE2000"`` if no appearance space was set.
+        """
+        first = next(iter(self.error_maps.values()))
+        return first.appearance_delta_name or "CIEDE2000"
+
 
 def compute_dashboard(
     image_array: np.ndarray,
     max_workers: int | None = None,
+    *,
+    appearance: AppearanceSpace | None = None,
 ) -> DashboardResult:
     """Run all three CVD simulations and error maps in parallel.
 
@@ -61,6 +79,10 @@ def compute_dashboard(
         image_array: Source image, any numeric dtype, shape (H, W, 3).
         max_workers: Passed to ``ThreadPoolExecutor``.  Defaults to the
             number of deficiencies (3).
+        appearance: Optional perceptually uniform color space.  When
+            provided, each error map will include an appearance-aware
+            per-pixel ΔE, and the summary table will rank deficiencies
+            by the appearance metric.
 
     Returns:
         :class:`DashboardResult`
@@ -72,7 +94,15 @@ def compute_dashboard(
 
     def _simulate_and_map(deficiency: str) -> tuple[str, np.ndarray, ErrorMap, dict[str, float]]:
         sim = simulator.transform_color_space(image_array, deficiency)  # type: ignore[arg-type]
-        em = get_error_map(image_array, sim, compute_dE00=True)
+        # When appearance space is provided, we skip CIEDE2000 computation
+        # because the summary will prefer the appearance metric anyway.
+        # This avoids redundant computation.
+        em = get_error_map(
+            image_array,
+            sim,
+            compute_dE00=(appearance is None),
+            appearance=appearance,
+        )
         stats = _summarize(em)
         return deficiency, sim, em, stats
 
@@ -98,20 +128,27 @@ def compute_dashboard(
 
 
 def _summarize(em: ErrorMap) -> dict[str, float]:
-    """Derive scalar summary statistics from an ErrorMap."""
-    ce = em.chroma_error_dE00
-    if ce is None:
+    """Derive scalar summary statistics from an ErrorMap.
+
+    Uses ``ErrorMap.preferred_metric()`` to select the best available
+    per-pixel color-difference array.
+    """
+    ce = em.preferred_metric()
+
+    if ce.size == 0:
         return {
             "mean_error": float("nan"),
             "median_error": float("nan"),
             "p95_error": float("nan"),
             "percent_affected": float("nan"),
         }
+    # Threshold of 1.0 ΔE is the classic just-noticeable-difference (JND).
+    # For CIEDE2000 and ΔE_ITP (scaled by 720), 1.0 ≈ one JND.
+    # For CIE76, the scale is different but 1.0 remains a reasonable threshold.
     return {
         "mean_error": float(np.mean(ce)),
         "median_error": float(np.median(ce)),
         "p95_error": float(np.percentile(ce, 95)),
-        # dE00 ≈ 1 is the classic just-noticeable-difference threshold.
         "percent_affected": float(np.count_nonzero(ce > 1.0) / ce.size * 100),
     }
 
@@ -156,11 +193,11 @@ def generate_dashboard_report(
     Layout::
         Row 0 — [           Original (centred)           ]
         Row 1 — [Protanopia]   [Deuteranopia]  [Tritanopia]
-        Row 2 — [Chroma Loss (P)] [Chroma Loss (D)] [Chroma Loss (T)]
+        Row 2 — [Metric (P)] [Metric (D)] [Metric (T)]
         Row 3 — (empty — reserved for summary table and caption)
 
     A summary table and a short caption explaining how to read the
-    chroma-loss heatmaps are placed below the grid.
+    metric heatmaps are placed below the grid.
 
     Args:
         result: Result from :func:`compute_dashboard`.
@@ -195,12 +232,13 @@ def generate_dashboard_report(
         axes[1, col].set_title(label, fontfamily="monospace", fontsize=10)
         axes[1, col].axis("off")
 
-    # Row 2: three chroma-loss heatmaps
+    # Row 2: three metric heatmaps
+    metric_label = result.metric_label
     for col, deficiency in enumerate(_DEFICIENCIES):
         em = result.error_maps.get(deficiency)
         if em is not None:
-            _show_heatmap(axes[2, col], em.chroma_error)
-            axes[2, col].set_title(f"Chroma Loss ({deficiency[0].upper()})", fontsize=11)
+            _show_heatmap(axes[2, col], em.preferred_metric())
+            axes[2, col].set_title(_heatmap_title(deficiency, metric_label), fontsize=11)
 
     # Row 3: empty — reserved for the summary table and caption below
     for col in range(3):
@@ -210,13 +248,13 @@ def generate_dashboard_report(
     summary_text = format_summary_table(result)
     fig.text(0.05, 0.1, summary_text, fontfamily="monospace", fontsize=10)
 
-    # Caption explaining how to read the chroma-loss images
+    # Caption explaining how to read the metric heatmaps
     caption = (
-        "Chroma-loss heatmaps show, per pixel, how much chromatic information\n"
-        "the simulation removed — red / bright regions lost the most colour\n"
-        "contrast; dark regions were preserved.  The hot colormap is\n"
-        "normalised so the brightest pixel in each heatmap represents the\n"
-        "maximum ΔE loss for that deficiency."
+        f"{metric_label} heatmaps show, per pixel, the selected metric value\n"
+        "for each simulated deficiency.  Red or bright regions indicate\n"
+        "larger values, while dark regions indicate smaller values.  The\n"
+        "hot colormap is normalised so the brightest pixel in each\n"
+        "heatmap represents the maximum metric value for that deficiency."
     )
     fig.text(0.05, 0.025, caption, fontfamily="monospace", fontsize=10)
 
@@ -226,7 +264,7 @@ def generate_dashboard_report(
 
 
 def _show_heatmap(ax, chroma_error: np.ndarray) -> None:
-    """Render a chroma-loss heatmap on a Matplotlib axis."""
+    """Render a metric heatmap on a Matplotlib axis."""
     vmax = float(chroma_error.max())
     if vmax < 1e-6:
         ax.imshow(np.zeros_like(chroma_error), cmap="hot", vmin=0, vmax=1)

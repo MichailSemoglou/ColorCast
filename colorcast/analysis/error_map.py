@@ -36,6 +36,7 @@ from typing import NamedTuple
 import numpy as np
 from skimage import color as skcolor
 
+from colorcast.analysis.appearance import AppearanceSpace
 from colorcast.processing.image_loader import normalize_to_float32
 
 # ---------------------------------------------------------------------------
@@ -85,6 +86,16 @@ class ErrorMap(NamedTuple):
         contributes.  More perceptually uniform than the Euclidean
         ``chroma_error``.  Range [0, ∞), typically ≤ 100.
         Set to ``None`` when ``compute_dE00=False``.
+
+    appearance_delta_name : str or None
+        Name of the appearance space used to compute ``appearance_delta``
+        (for example ``"ICtCp"``).  ``None`` when no appearance space
+        was supplied.
+
+    appearance_delta : np.ndarray or None
+        Per-pixel ΔE computed by an :class:`~colorcast.analysis.appearance.AppearanceSpace`,
+        shape (H, W), dtype float32.  ``None`` when no appearance space
+        was supplied.
     """
 
     signed: np.ndarray
@@ -93,6 +104,29 @@ class ErrorMap(NamedTuple):
     signed_chroma_ab: np.ndarray
     orig_l_star: np.ndarray
     chroma_error_dE00: np.ndarray | None = None
+    appearance_delta_name: str | None = None
+    appearance_delta: np.ndarray | None = None
+
+    def preferred_metric(self) -> np.ndarray:
+        """Return the best available per-pixel color-difference array.
+
+        Priority order:
+        1. ``appearance_delta`` (appearance-aware ΔE, e.g. ICtCp)
+        2. ``chroma_error_dE00`` (CIEDE2000 chromaticity error)
+        3. ``chroma_error`` (Euclidean chromaticity error)
+
+        This method centralizes the domain judgment about which metric to
+        prefer, so downstream code (e.g. dashboard summaries) does not need
+        to encode the priority rule.
+
+        Returns:
+            Per-pixel color-difference array, shape (H, W), dtype float32.
+        """
+        if self.appearance_delta is not None:
+            return self.appearance_delta
+        if self.chroma_error_dE00 is not None:
+            return self.chroma_error_dE00
+        return self.chroma_error
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +156,8 @@ def get_error_map(
     original_img: np.ndarray,
     simulated_img: np.ndarray,
     compute_dE00: bool = False,
+    *,
+    appearance: AppearanceSpace | None = None,
 ) -> ErrorMap:
     """Compute the full error analysis between *original_img* and *simulated_img*.
 
@@ -142,14 +178,22 @@ def get_error_map(
         When ``True``, the returned :class:`ErrorMap` includes
         ``chroma_error_dE00`` as a per-pixel ``(H, W)`` array of dtype
         ``float32`` computed from the Lab* channels.  When ``False``, that
-        field is left unavailable as ``np.nan`` values so callers can still
-        unpack the result without a second code path.
+        field is left as ``None``.
+
+    appearance : :class:`~colorcast.analysis.appearance.AppearanceSpace` or None
+        Optional perceptually uniform color space for computing an
+        appearance-aware ΔE.  When provided, the returned
+        :class:`ErrorMap` will carry ``appearance_delta`` (per-pixel ΔE)
+        and ``appearance_delta_name``.  For example, pass
+        :class:`~colorcast.analysis.appearance.ICtCpSpace` to get the
+        HDR-aware ICtCp ΔE scaled by 720.
 
     Returns
     -------
     ErrorMap
         Named tuple with ``signed``, ``absolute``, ``chroma_error``,
-        ``chroma_error_dE00``, ``signed_chroma_ab``, and ``orig_l_star``
+        ``chroma_error_dE00``, ``signed_chroma_ab``, ``orig_l_star``,
+        and optionally ``appearance_delta`` and ``appearance_delta_name``
         arrays.  See :class:`ErrorMap` for details.
 
     Raises
@@ -229,6 +273,14 @@ def get_error_map(
     # NaN values instead of a computed metric.
     chroma_error_dE00 = _compute_chroma_error_dE00(orig_lab, sim_lab) if compute_dE00 else None
 
+    # -- Appearance-based ΔE ---------------------------------------------------
+    appearance_delta: np.ndarray | None = None
+    appearance_delta_name: str | None = None
+    if appearance is not None:
+        result = appearance.delta_E(orig, sim)
+        appearance_delta = result.values
+        appearance_delta_name = result.space_name
+
     # Cache the original L* channel for callers that need it
     # without recomputing rgb2lab on the original image.
     orig_l_star = orig_lab[:, :, 0].astype(np.float32)  # (H, W)
@@ -240,6 +292,8 @@ def get_error_map(
         chroma_error_dE00=chroma_error_dE00,
         signed_chroma_ab=signed_chroma_ab,
         orig_l_star=orig_l_star,
+        appearance_delta_name=appearance_delta_name,
+        appearance_delta=appearance_delta,
     )
 
 
@@ -297,8 +351,8 @@ def plot_error_heatmap(
 
     # -- Optional: show original and simulated --------------------------------
     if show_images:
-        orig_disp = normalize_to_float32(np.asarray(original_img, dtype=np.float32))
-        sim_disp = normalize_to_float32(np.asarray(simulated_img, dtype=np.float32))
+        orig_disp = normalize_to_float32(np.asarray(original_img))
+        sim_disp = normalize_to_float32(np.asarray(simulated_img))
 
         axes[col].imshow(orig_disp)
         axes[col].set_title("Original", fontsize=11)

@@ -7,8 +7,16 @@ This package provides tools for:
 - Error map / difference analysis for colour-blindness simulation
 - Daltonization: re-encoding lost chromatic information
 - CVD accessibility dashboard: compare deficiencies at once
+- Perceptually uniform appearance spaces (ICtCp, CIELAB)
 """
 
+from colorcast.analysis.appearance import (
+    AppearanceDelta,
+    AppearanceSpace,
+    CIELABSpace,
+    ICtCpSpace,
+    make_appearance_space,
+)
 from colorcast.analysis.comparison import MethodComparison
 from colorcast.analysis.daltonization import (
     apply_daltonization,
@@ -33,6 +41,11 @@ from colorcast.analysis.visualization import (
 )
 
 __all__ = [
+    "AppearanceSpace",
+    "AppearanceDelta",
+    "CIELABSpace",
+    "ICtCpSpace",
+    "make_appearance_space",
     "MethodComparison",
     "visualize_transfer_result",
     "visualize_method_comparison",
