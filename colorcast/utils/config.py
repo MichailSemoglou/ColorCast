@@ -6,7 +6,7 @@ import json
 import os
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any
+from typing import Any, get_origin, get_type_hints
 
 
 @dataclass
@@ -96,8 +96,6 @@ class ColorCastConfig:
             FileNotFoundError: If the file does not exist (surfaced
                 directly for callers to handle).
         """
-        from typing import Any, get_origin, get_type_hints
-
         resolved = Path(path) if path is not None else cls.get_config_path()
         raw = json.loads(resolved.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
@@ -113,18 +111,18 @@ class ColorCastConfig:
                 filtered[key] = value
                 continue
             origin = get_origin(expected) or expected
-            if origin is int and isinstance(value, bool):
-                raise TypeError(
-                    f"{key}: expected {origin.__name__}, " f"got {type(value).__name__} ({value!r})"
-                )
-            if origin is float and isinstance(value, int) and not isinstance(value, bool):
+            # bool subclasses int, so isinstance alone cannot reject it;
+            # accept a bool only where the field declares one.
+            valid = isinstance(value, origin) and (origin is bool or not isinstance(value, bool))
+            if valid:
+                filtered[key] = value
+            elif origin is float and isinstance(value, int) and not isinstance(value, bool):
+                # JSON does not distinguish int from float; accept ints here.
                 filtered[key] = float(value)
-                continue
-            if not isinstance(value, origin):
+            else:
                 raise TypeError(
-                    f"{key}: expected {origin.__name__}, " f"got {type(value).__name__} ({value!r})"
+                    f"{key}: expected {origin.__name__}, got {type(value).__name__} ({value!r})"
                 )
-            filtered[key] = value
         return cls(**filtered)
 
 
