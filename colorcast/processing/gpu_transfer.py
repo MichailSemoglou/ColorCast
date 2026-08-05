@@ -1,14 +1,11 @@
 """
 Color transfer functions with CuPy-backed acceleration where available.
 
-The ``gpu_`` prefix is historical: these entry points accept numpy arrays
-and return numpy arrays regardless of whether CuPy is installed.  When
-CuPy is absent every function falls back to the CPU path transparently.
-Only ``gpu_mean_std_transfer`` and ``gpu_lab_transfer`` exercise genuine GPU
-kernels; the
-remaining functions route through scikit-image on the CPU and are kept
-under their existing names so callers do not need to change import paths
-when GPU kernels land.
+These entry points accept numpy arrays and return numpy arrays regardless
+of whether CuPy is installed.  When CuPy or a CUDA device is missing,
+every function falls back to the CPU path transparently.  Only
+``gpu_mean_std_transfer`` and ``gpu_lab_transfer`` exercise genuine GPU
+kernels; the remaining functions route through scikit-image on the CPU.
 
 Use ``is_gpu_available()`` to check at runtime whether the accelerator
 will be used.

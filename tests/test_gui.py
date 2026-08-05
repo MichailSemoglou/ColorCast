@@ -170,6 +170,37 @@ def _make_dashboard_result(h: int = 8, w: int = 8):
     )
 
 
+def test_heatmap_title_uses_selected_metric_label():
+    from colorcast.analysis.dashboard import _heatmap_title
+
+    assert _heatmap_title("protanopia", "ICtCp") == "ICtCp (P)"
+    assert _heatmap_title("deuteranopia", "CIEDE2000") == "CIEDE2000 (D)"
+
+
+class TestDashboardDialogComputationRequests:
+    """DashboardDialog request lifecycle keeps the report button state in sync."""
+
+    def test_start_computation_disables_report_button(self, qt_app, monkeypatch):
+        """Verify that dashboard work disables the report button.
+
+        The test uses the qt_app fixture to provide a Qt application context and
+        the monkeypatch fixture to replace the worker launcher and dashboard
+        computation with no-op functions. The test returns None because it only
+        asserts on the widget state.
+        """
+        from colorcast.gui import DashboardDialog
+
+        monkeypatch.setattr("colorcast.gui._run_in_thread", lambda target, *, on_done=None: None)
+
+        dialog = DashboardDialog(np.random.rand(8, 8, 3).astype(np.float32))
+        dialog._report_button.setEnabled(True)
+
+        dialog._start_computation()
+
+        assert dialog._report_button is not None
+        assert not dialog._report_button.isEnabled()
+
+
 class TestDashboardDialogPopulateResults:
     """DashboardDialog._populate_results with a precomputed DashboardResult."""
 
@@ -188,3 +219,49 @@ class TestDashboardDialogPopulateResults:
         assert "Protanopia" in text
         assert dialog._report_button is not None
         assert dialog._report_button.isEnabled()
+
+    def test_stale_completion_does_not_mutate_current_result(self, qt_app, monkeypatch):
+        import colorcast.gui as gui_module
+        from colorcast.gui import DashboardDialog
+
+        pending = []
+
+        def fake_run(target, *, on_done=None):
+            pending.append((target, on_done))
+
+        monkeypatch.setattr(gui_module, "_run_in_thread", fake_run)
+        monkeypatch.setattr(
+            gui_module, "compute_dashboard", lambda image, appearance=None: object()
+        )
+
+        # Suppress the initial _start_computation call from __init__ so the
+        # test controls exactly how many requests are queued.
+        monkeypatch.setattr(DashboardDialog, "_start_computation", lambda self: None)
+
+        dialog = DashboardDialog(np.random.rand(8, 8, 3).astype(np.float32))
+        monkeypatch.undo()
+
+        # Re-apply the _run_in_thread patch (undo restores it to the real
+        # implementation, which would run the target in a real thread).
+        monkeypatch.setattr(gui_module, "_run_in_thread", fake_run)
+        monkeypatch.setattr(dialog, "_populate_results", lambda: None)
+
+        dialog._start_computation()
+        dialog._start_computation()
+        assert len(pending) == 2
+
+        # Set a sentinel result to verify no stale completion mutates it.
+        sentinel = object()
+        dialog._result = sentinel
+
+        pending[0][0]()
+        pending[0][1]()
+
+        assert dialog._result is sentinel
+        assert dialog._error is None
+
+        pending[1][0]()
+        pending[1][1]()
+
+        assert dialog._result is not None
+        assert dialog._error is None

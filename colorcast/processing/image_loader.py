@@ -18,6 +18,7 @@ Data structures
 
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import NamedTuple
 
@@ -27,6 +28,7 @@ from skimage import img_as_float, io, transform  # type: ignore[attr-defined]
 from colorcast.utils.exceptions import ImageLoadError, InvalidImageFormatError, ValidationError
 from colorcast.utils.validators_enhanced import (
     ALLOWED_IMAGE_EXTENSIONS,
+    MAX_IMAGE_PIXELS,
     validate_image_array,
     validate_image_file,
 )
@@ -34,32 +36,81 @@ from colorcast.utils.validators_enhanced import (
 logger = logging.getLogger(__name__)
 
 _MAX_FILE_BYTES = 200_000_000  # 200 MB
+_PIL_IMAGE_LOCK = threading.Lock()
 
 
-def _get_image_dimensions(filepath: str) -> tuple[int, int]:
-    """Return ``(width, height)`` from the image header without decoding pixels.
+def _read_image_array(filepath: str) -> np.ndarray:
+    """Read an image with skimage and reject unsupported multi-frame stacks.
 
-    Uses PIL if available; falls back to ``skimage.io.imread`` (which allocates
-    the full array) and then discards it.
+    Args:
+        filepath: Path to the image file to read.
 
     Returns:
-        (width, height) in pixels
+        np.ndarray: The decoded image array.
+    """
+    arr = io.imread(filepath)
+    if arr.ndim > 3:
+        raise InvalidImageFormatError(
+            "Multi-frame image stacks are not supported; provide a single image frame."
+        )
+    if arr.ndim == 3 and arr.shape[-1] not in {1, 3, 4}:
+        raise InvalidImageFormatError(
+            "Multi-frame image stacks are not supported; provide a single image frame."
+        )
+    return arr
+
+
+def _get_image_dimensions(filepath: str, max_pixels: int | None = None) -> tuple[int, int]:
+    """Return ``(width, height)`` from the image header without decoding pixels.
+
+    Uses PIL if available; on any PIL failure, decodes with
+    ``skimage.io.imread`` (which allocates the full array) and reads the
+    shape instead. ``DecompressionBombError`` is treated as a hard limit
+    violation and re-raised so the caller can reject oversized images before
+    a full decode.
+
+    Args:
+        filepath: Path to the image file to inspect.
+        max_pixels: Optional pixel-limit override for the PIL header probe.
+
+    Returns:
+        tuple[int, int]: The image dimensions as ``(width, height)`` in pixels.
     """
     try:
         from PIL import Image as _PILImage
     except ImportError:
-        arr = io.imread(filepath)
+        _PILImage = None  # type: ignore[assignment]
+
+    if _PILImage is not None:
+        pixel_limit = max_pixels if max_pixels is not None else MAX_IMAGE_PIXELS
+        with _PIL_IMAGE_LOCK:
+            original_limit = getattr(_PILImage, "MAX_IMAGE_PIXELS", None)
+            if pixel_limit is not None:
+                _PILImage.MAX_IMAGE_PIXELS = pixel_limit
+            try:
+                with _PILImage.open(filepath) as img:
+                    return img.size  # (width, height)
+            except _PILImage.DecompressionBombError:
+                raise
+            except _PILImage.DecompressionBombWarning as e:
+                raise _PILImage.DecompressionBombError(str(pixel_limit)) from e
+            except (OSError, ValueError):
+                pass
+            except Exception:
+                logger.warning(
+                    "PIL header read failed for %r; falling back to full decode", filepath
+                )
+            finally:
+                if pixel_limit is not None:
+                    if original_limit is None:
+                        delattr(_PILImage, "MAX_IMAGE_PIXELS")
+                    else:
+                        _PILImage.MAX_IMAGE_PIXELS = original_limit
+
+    arr = _read_image_array(filepath)
+    if arr.ndim == 2:
         return (arr.shape[1], arr.shape[0])
-    try:
-        with _PILImage.open(filepath) as img:
-            return img.size  # (width, height)
-    except (OSError, ValueError):
-        arr = io.imread(filepath)
-        return (arr.shape[1], arr.shape[0])
-    except Exception:
-        logger.warning("PIL header read failed for %r; falling back to full decode", filepath)
-        arr = io.imread(filepath)
-        return (arr.shape[1], arr.shape[0])
+    return (arr.shape[1], arr.shape[0])
 
 
 class ImageMeta(NamedTuple):
@@ -199,7 +250,7 @@ def load_image_with_meta(
     if file_bytes > _MAX_FILE_BYTES:
         raise ValidationError(f"File too large: {file_bytes:,} bytes (max {_MAX_FILE_BYTES:,})")
 
-    width, height = _get_image_dimensions(path)
+    width, height = _get_image_dimensions(path, max_pixels=max_pixels)
     total_pixels = width * height
     if total_pixels > max_pixels:
         raise ValidationError(
@@ -207,7 +258,9 @@ def load_image_with_meta(
         )
 
     try:
-        img = img_as_float(io.imread(path))
+        img = img_as_float(_read_image_array(path))
+    except InvalidImageFormatError:
+        raise
     except OSError as e:
         raise ImageLoadError(f"Failed to read image file: {e}") from e
     except Exception as e:

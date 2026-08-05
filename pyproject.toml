@@ -81,6 +81,9 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 exclude = ["tests*"]
 
+[tool.setuptools.package-data]
+colorcast = ["assets/*.png"]
+
 [tool.setuptools.dynamic]
 version = {attr = "colorcast._version.__version__"}
 

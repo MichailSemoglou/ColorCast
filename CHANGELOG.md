@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.6.0] – 2026-08-05
+
+### Added
+
+- Perceptually uniform appearance-space abstraction in `colorcast/analysis/appearance.py` with two backends: **CIELAB** (legacy, D65) and **ICtCp** (ITU-R BT.2100, HDR-aware, ΔE scaled ×720). The `AppearanceSpace` protocol exposes `from_rgb(rgb)` and `delta_E(a, b)` methods.
+- `ErrorMap` carries two new optional fields — `appearance_delta` (per-pixel ΔE) and `appearance_delta_name` (space identifier) — populated when an `AppearanceSpace` is passed to `get_error_map()`.
+- `get_error_map()` accepts an optional keyword `appearance=` parameter for computing appearance-based ΔE alongside the existing Euclidean and CIEDE2000 metrics.
+- `compute_dashboard()` accepts an `appearance=` keyword and ranks deficiencies by the appearance metric when available; `_summarize` prefers `appearance_delta` over `chroma_error_dE00` over `chroma_error`.
+- New CLI subcommand: `colorcast dashboard IMAGE [-o OUTPUT] [--appearance {cielab,ictcp}]` generates a full-resolution CVD accessibility report.
+- GUI Dashboard dialog gained a "ΔE metric" dropdown (CIELAB / ICtCp) in the bottom button bar; changing it re-triggers computation.
+- `make_appearance_space(name)` factory function centralizes appearance-space creation by name; CLI and GUI now route through it, eliminating duplicated selection logic and brittle combobox-index coupling.
+- `ErrorMap.preferred_metric()` method encapsulates the metric-priority rule (appearance_delta > chroma_error_dE00 > chroma_error), so dashboard summaries no longer encode this domain judgment directly.
+- Consolidated `srgb_to_linear` gamma-decoding utility into `colorcast/utils/color_utils.py`, removing duplicate implementations from `appearance.py` and `simulation.py`.
+- `AppearanceSpace` ABC docstring now documents thread-safety requirements for concurrent `delta_E` calls on shared instances; JND threshold comment restored in `dashboard.py:136` explaining why 1.0 ΔE ≈ one just-noticeable-difference for both CIEDE2000 and ΔE_ITP.
+- Report filename and title now include the ΔE metric label (e.g. ``dashboard_report_ictcp.png``, ``"CVD Accessibility Dashboard – ICtCp"``), derived from ``DashboardResult.metric_label``.
+
+### Changed
+
+- `CIELABSpace` default metric changed from `cie76` to `ciede2000` for better perceptual uniformity.
+- Replaced the QDarkStyle dependency with a custom QSS stylesheet and redesigned the GUI with a dark canvas (#171717), white pill buttons, hairline borders (#3d3d3d), and no drop shadows.
+- README test metrics updated: 378 passing, 1 skipped (up from 361 in v2.5.0).
+
 ## [2.5.0] – 2026-08-02
 
 ### Added

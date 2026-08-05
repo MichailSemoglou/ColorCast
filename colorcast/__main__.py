@@ -190,6 +190,36 @@ Examples:
         help="Show version information",
     )
 
+    # Dashboard command
+    dashboard_parser = subparsers.add_parser(
+        "dashboard",
+        help="Generate a CVD accessibility dashboard report",
+    )
+    dashboard_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Show traceback on errors",
+    )
+    dashboard_parser.add_argument(
+        "image",
+        type=Path,
+        help="Path to the image to analyze",
+    )
+    dashboard_parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("dashboard_report.png"),
+        help="Output path for the dashboard report (default: dashboard_report.png)",
+    )
+    dashboard_parser.add_argument(
+        "--appearance",
+        choices=["cielab", "ictcp"],
+        default="cielab",
+        help="Appearance space for ΔE ranking (default: cielab)",
+    )
+
     return parser.parse_args()
 
 
@@ -332,6 +362,34 @@ def cmd_info(args: argparse.Namespace) -> None:
         print("Visit https://github.com/MichailSemoglou/ColorCast for more info.")
 
 
+def cmd_dashboard(args: argparse.Namespace) -> None:
+    """Handle dashboard command."""
+    from colorcast.analysis.appearance import make_appearance_space
+    from colorcast.analysis.dashboard import compute_dashboard, generate_dashboard_report
+
+    image = load_image(str(args.image))
+    appearance = make_appearance_space(args.appearance)
+
+    print(f"Computing CVD dashboard (appearance space: {appearance.name})…")
+    result = compute_dashboard(image, appearance=appearance)
+
+    print("Summary:")
+    for deficiency in ("protanopia", "deuteranopia", "tritanopia"):
+        stats = result.summary[deficiency]
+        print(
+            f"  {deficiency:14}  mean={stats['mean_error']:7.2f}  "
+            f"median={stats['median_error']:7.2f}  "
+            f"p95={stats['p95_error']:7.2f}  "
+            f"affected={stats['percent_affected']:5.1f}%"
+        )
+
+    metric_label = result.metric_label
+    title = f"CVD Accessibility Dashboard – {metric_label}"
+    print(f"\nGenerating report: {args.output}")
+    generate_dashboard_report(result, str(args.output), title=title)
+    print(f"Dashboard saved to {args.output}")
+
+
 def main() -> None:
     """Main entry point for CLI."""
     args = parse_args()
@@ -350,6 +408,8 @@ def main() -> None:
             cmd_list_methods()
         elif args.command == "info":
             cmd_info(args)
+        elif args.command == "dashboard":
+            cmd_dashboard(args)
         else:
             print(f"Error: Unknown command '{args.command}'", file=sys.stderr)
             sys.exit(1)
