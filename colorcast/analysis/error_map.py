@@ -268,9 +268,8 @@ def get_error_map(
     chroma_error = np.sqrt(a_diff**2 + b_diff**2)  # (H, W) float32
 
     # -- CIEDE2000 chromaticity error -----------------------------------------
-    # Compute dE00 with L* pinned to 50 to isolate chromaticity contribution.
-    # By default this optional output is disabled, so the result contains
-    # NaN values instead of a computed metric.
+    # Compute dE00 with L* set to 50 to isolate chromatic contribution.
+    # When compute_dE00 is False the field is left as None.
     chroma_error_dE00 = _compute_chroma_error_dE00(orig_lab, sim_lab) if compute_dE00 else None
 
     # -- Appearance-based ΔE ---------------------------------------------------

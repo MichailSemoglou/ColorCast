@@ -888,15 +888,15 @@ class DashboardDialog(QDialog):
 
         # Row 0: [Original] centered, alone
         # Row 1: [Protanopia]         [Deuteranopia]         [Tritanopia]
-        # Row 2: [Chroma Loss (P)]    [Chroma Loss (D)]      [Chroma Loss (T)]
+        # Row 2: [Error Metric (P)]  [Error Metric (D)]  [Error Metric (T)]
         positions: list[tuple[int, int, str, str]] = [
             (0, 1, "original", "Original"),
             (1, 0, "protanopia", _DEFICIENCY_LABELS["protanopia"]),
             (1, 1, "deuteranopia", _DEFICIENCY_LABELS["deuteranopia"]),
             (1, 2, "tritanopia", _DEFICIENCY_LABELS["tritanopia"]),
-            (2, 0, "heatmap_protanopia", "Chroma Loss (P)"),
-            (2, 1, "heatmap_deuteranopia", "Chroma Loss (D)"),
-            (2, 2, "heatmap_tritanopia", "Chroma Loss (T)"),
+            (2, 0, "heatmap_protanopia", "Error Metric (P)"),
+            (2, 1, "heatmap_deuteranopia", "Error Metric (D)"),
+            (2, 2, "heatmap_tritanopia", "Error Metric (T)"),
         ]
         for row, col, key, label_text in positions:
             label = QLabel(self)
@@ -1010,8 +1010,8 @@ class DashboardDialog(QDialog):
         for deficiency in _DEFICIENCIES:
             _show(result.simulated[deficiency], deficiency)
 
-        # Chroma-loss heatmaps — use the chroma_error field rendered as
-        # a grayscale hot image
+        # Error-metric heatmaps — renders preferred_metric() as a grayscale
+        # hot image
         for key, deficiency in [
             ("heatmap_protanopia", "protanopia"),
             ("heatmap_deuteranopia", "deuteranopia"),

@@ -259,6 +259,8 @@ def load_image_with_meta(
 
     try:
         img = img_as_float(_read_image_array(path))
+    except InvalidImageFormatError:
+        raise
     except OSError as e:
         raise ImageLoadError(f"Failed to read image file: {e}") from e
     except Exception as e:
