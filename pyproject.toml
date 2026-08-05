@@ -81,6 +81,9 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 exclude = ["tests*"]
 
+[tool.setuptools.package-data]
+colorcast = ["assets/*.png"]
+
 [tool.setuptools.dynamic]
 version = {attr = "colorcast._version.__version__"}
 
@@ -93,7 +96,7 @@ profile = "black"
 line_length = 100
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.10"
 warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true
