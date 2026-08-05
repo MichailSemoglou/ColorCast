@@ -37,23 +37,23 @@
 
 ## Interface
 
-![ColorCast Interface](imgs/interface.png)
+![ColorCast Interface](https://raw.githubusercontent.com/MichailSemoglou/ColorCast/main/imgs/interface.png)
 
 _The ColorCast interface: content image, style image, and result panels_
 
-![ColorCast Daltonize (P) mode](imgs/interface_2.png)
+![ColorCast Daltonize (P) mode](https://raw.githubusercontent.com/MichailSemoglou/ColorCast/main/imgs/interface_2.png)
 
 _Daltonize (P) mode correcting an image for protanopia, with correction intensity control_
 
-![CVD Accessibility Dashboard](imgs/CVD-Accessibility-Dashboard.png)
+![CVD Accessibility Dashboard](https://raw.githubusercontent.com/MichailSemoglou/ColorCast/main/imgs/CVD-Accessibility-Dashboard.png)
 
 _CVD Accessibility Dashboard: side-by-side simulations and error maps for all three deficiency types_
 
-![Compare Transfer Methods](imgs/Compare-Transfer-Methods.png)
+![Compare Transfer Methods](https://raw.githubusercontent.com/MichailSemoglou/ColorCast/main/imgs/Compare-Transfer-Methods.png)
 
 _Method comparison: ranked results across multiple metrics and transfer algorithms_
 
-![Dashboard Report](imgs/dashboard_report_ICtCp.png)
+![Dashboard Report](https://raw.githubusercontent.com/MichailSemoglou/ColorCast/main/imgs/dashboard_report_ICtCp.png)
 
 _Full dashboard report summarizing simulation results and Daltonization efficacy_
 
