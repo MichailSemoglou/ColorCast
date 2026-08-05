@@ -56,6 +56,7 @@ from typing import ClassVar, Literal, get_args
 import numpy as np
 
 from colorcast.processing.image_loader import normalize_to_float32
+from colorcast.utils.color_utils import srgb_to_linear
 
 # Type alias used in public method signatures. This Literal is the single
 # source of truth for the supported deficiencies; Python 3.10 cannot unpack a
@@ -66,18 +67,6 @@ DeficiencyType = Literal["protanopia", "deuteranopia", "tritanopia"]
 # Deficiency names accepted at runtime, derived from DeficiencyType so that
 # validation and static typing cannot drift apart.
 SUPPORTED_DEFICIENCIES: tuple[str, ...] = get_args(DeficiencyType)
-
-
-def _srgb_to_linear(rgb: np.ndarray) -> np.ndarray:
-    """Convert nonlinear sRGB values in [0, 1] to linear RGB.
-
-    Uses the IEC 61966-2-1 sRGB transfer function.
-    """
-    return np.where(
-        rgb <= 0.04045,
-        rgb / 12.92,
-        np.power((rgb + 0.055) / 1.055, 2.4),
-    )
 
 
 def _linear_to_srgb(linear: np.ndarray) -> np.ndarray:
@@ -236,7 +225,7 @@ class ColorBlindSimulator:
 
         h, w, _ = img.shape
         pixels = img.reshape(-1, 3).astype(np.float64)  # upcast for precision
-        linear_pixels = _srgb_to_linear(pixels)
+        linear_pixels = srgb_to_linear(pixels)
 
         strategy = self._PROJECTION[deficiency_type]
         if callable(strategy):

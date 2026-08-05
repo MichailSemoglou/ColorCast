@@ -67,6 +67,7 @@ venv.bak/
 
 # macOS
 .DS_Store
+**/.DS_Store
 
 # Windows
 Thumbs.db
@@ -92,6 +93,9 @@ softwareX/
 # Local roadmap
 /ROADMAP.md
 
+# Commit plan (local development only)
+/COMMIT_PLAN.md
+
 # Kilo local configuration
 /kilo.json
 # Image files (test output, not committed)
@@ -107,3 +111,7 @@ softwareX/
 # README reference images are tracked
 !/imgs/
 !/imgs/**
+
+# GUI assets are tracked
+!/colorcast/assets/
+!/colorcast/assets/**
