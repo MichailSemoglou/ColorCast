@@ -79,7 +79,7 @@ def _get_image_dimensions(filepath: str, max_pixels: int | None = None) -> tuple
     try:
         from PIL import Image as _PILImage
     except ImportError:
-        _PILImage = None
+        _PILImage = None  # type: ignore[assignment]
 
     if _PILImage is not None:
         pixel_limit = max_pixels if max_pixels is not None else MAX_IMAGE_PIXELS
