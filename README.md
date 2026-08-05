@@ -17,9 +17,11 @@
 - **Selective Regional Transfer** - Target shadows, midtones, or highlights specifically
 - **Modular Package** - Use as Python API or run GUI/CLI
 - **Performance Optimized** - LRU caching and batch processing support
-- **Tested** - 75% test coverage with 361 passing tests
-- **Documented** - API documentation and examples
-- **Plugin Architecture** - Easy to add custom transfer methods
+- **Tested** – 75% test coverage with 378 passing tests
+- **Documented** – API documentation and examples
+- **Perceptually Uniform ΔE Metrics** – CIELAB (defaults to CIEDE2000) and ICtCp (HDR, BT.2100) appearance spaces for ranking CVD deficiency severity
+- **Plugin Architecture** – Add custom transfer methods through plugins
+- **Minimal Dark Theme** – Dark interface with a neutral canvas, bordered cards, and white action buttons
 
 ### Transfer Methods
 
@@ -51,7 +53,7 @@ _CVD Accessibility Dashboard: side-by-side simulations and error maps for all th
 
 _Method comparison: ranked results across multiple metrics and transfer algorithms_
 
-![Dashboard Report](imgs/dashboard_report.png)
+![Dashboard Report](imgs/dashboard_report_ICtCp.png)
 
 _Full dashboard report summarizing simulation results and Daltonization efficacy_
 
@@ -166,6 +168,12 @@ Get package information:
 colorcast info --version
 ```
 
+Generate a CVD accessibility dashboard report:
+
+```bash
+colorcast dashboard image.jpg -o report.png --appearance ictcp
+```
+
 **CLI Options:**
 
 - `-m, --method`: Transfer method (histogram, meanstd, lab_reinhard, lut_linear, lut_scurve, lut_contrast, selective_shadows, selective_midtones, selective_highlights, simulate_protanopia, simulate_deuteranopia, simulate_tritanopia, daltonize_protanopia, daltonize_deuteranopia, daltonize_tritanopia)
@@ -237,6 +245,30 @@ style = load_image("style.jpg")
 
 method = registry.get_method("histogram")
 result = method.transfer(content, style)
+```
+
+#### Using Appearance Spaces for Perceptually Uniform Metrics
+
+```python
+from colorcast.analysis import make_appearance_space, get_error_map
+from colorcast.processing.simulation import ColorBlindSimulator
+from colorcast import load_image
+
+# Load image and simulate color-vision deficiency
+image = load_image("content.jpg")
+simulator = ColorBlindSimulator()
+simulated = simulator.transform_color_space(image, "deuteranopia")
+
+# Create appearance space by name (CIELAB defaults to CIEDE2000)
+cielab = make_appearance_space("cielab")
+ictcp = make_appearance_space("ictcp")  # HDR-aware BT.2100
+
+# Compute error map with appearance-based ΔE
+error_map = get_error_map(image, simulated, appearance=ictcp)
+
+# Access the appearance delta
+print(f"Space: {error_map.appearance_delta_name}")
+print(f"Mean ΔE: {error_map.appearance_delta.mean():.2f}")
 ```
 
 #### Batch Processing
@@ -330,7 +362,7 @@ pytest tests/test_transfer_methods.py
 pytest -v
 ```
 
-**Test Coverage:** 75% (361 passing, 1 skipped)
+**Test Coverage:** 75% (378 passing, 1 skipped)
 
 - Core transfer methods: 100% coverage
 - Full test suite including integration, performance, and property-based tests
@@ -440,7 +472,7 @@ If you use ColorCast in academic work, please cite it as:
   title     = {ColorCast: Color Transfer Toolkit for Python},
   doi       = {10.5281/zenodo.18550038},
   url       = {https://github.com/MichailSemoglou/ColorCast},
-  version   = {2.5.0},
+  version   = {2.6.0},
   year      = {2026},
 }
 ```

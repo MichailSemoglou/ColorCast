@@ -6,4 +6,4 @@ import Python (``CITATION.cff``, ``.zenodo.json``) carry their own
 copy; update all of them in sync when cutting a release.
 """
 
-__version__ = "2.5.0"
+__version__ = "2.6.0"
