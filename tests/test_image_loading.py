@@ -161,6 +161,52 @@ class TestLoadImage:
 
         assert loaded.shape[0] * loaded.shape[1] <= 50000
 
+    def test_header_read_decompression_bomb_reraises(self, tmp_path, monkeypatch):
+        """Pillow decompression bombs should stop before a full decode fallback.
+
+        Args:
+            tmp_path: Temporary directory fixture used to create a small image file.
+            monkeypatch: Fixture used to replace ``io.imread`` with a function that
+                would fail if the loader fell back to a full decode.
+
+        Returns:
+            None: The test passes when the expected ``DecompressionBombError`` is raised.
+        """
+        from PIL import Image
+
+        from colorcast.processing import image_loader
+
+        img_path = tmp_path / "bomb.png"
+        Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8)).save(img_path)
+
+        def fail_imread(*args, **kwargs):
+            raise AssertionError("full decode should not be attempted")
+
+        monkeypatch.setattr(image_loader.io, "imread", fail_imread)
+
+        with pytest.raises(Image.DecompressionBombError):
+            image_loader._get_image_dimensions(str(img_path), max_pixels=10)
+
+    def test_header_read_rejects_multiframe_stack(self, monkeypatch):
+        """Multi-frame TIFF-like arrays should not be treated as a single image.
+
+        Args:
+            monkeypatch: Fixture used to replace ``io.imread`` with a stub that
+                returns a multi-frame array shape.
+
+        Returns:
+            None: The test passes when the loader raises ``InvalidImageFormatError``
+            for the unsupported multi-frame input.
+        """
+        from colorcast.processing import image_loader
+
+        monkeypatch.setattr(
+            image_loader.io, "imread", lambda path: np.zeros((2, 4, 6, 3), dtype=np.uint8)
+        )
+
+        with pytest.raises(InvalidImageFormatError, match="Multi-frame"):
+            image_loader._get_image_dimensions("dummy.tiff")
+
 
 class TestSaveImage:
     """Tests for save_image dtype validation."""
