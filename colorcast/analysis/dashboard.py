@@ -263,11 +263,11 @@ def generate_dashboard_report(
     return output_path
 
 
-def _show_heatmap(ax, chroma_error: np.ndarray) -> None:
+def _show_heatmap(ax, metric: np.ndarray) -> None:
     """Render a metric heatmap on a Matplotlib axis."""
-    vmax = float(chroma_error.max())
+    vmax = float(metric.max())
     if vmax < 1e-6:
-        ax.imshow(np.zeros_like(chroma_error), cmap="hot", vmin=0, vmax=1)
+        ax.imshow(np.zeros_like(metric), cmap="hot", vmin=0, vmax=1)
     else:
-        ax.imshow(chroma_error / vmax, cmap="hot", vmin=0, vmax=1)
+        ax.imshow(metric / vmax, cmap="hot", vmin=0, vmax=1)
     ax.axis("off")

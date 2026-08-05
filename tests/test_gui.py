@@ -236,23 +236,28 @@ class TestDashboardDialogPopulateResults:
 
         # Suppress the initial _start_computation call from __init__ so the
         # test controls exactly how many requests are queued.
-        _original_start = DashboardDialog._start_computation
-        DashboardDialog._start_computation = lambda self: None
-        try:
-            dialog = DashboardDialog(np.random.rand(8, 8, 3).astype(np.float32))
-        finally:
-            DashboardDialog._start_computation = _original_start
+        monkeypatch.setattr(DashboardDialog, "_start_computation", lambda self: None)
 
+        dialog = DashboardDialog(np.random.rand(8, 8, 3).astype(np.float32))
+        monkeypatch.undo()
+
+        # Re-apply the _run_in_thread patch (undo restores it to the real
+        # implementation, which would run the target in a real thread).
+        monkeypatch.setattr(gui_module, "_run_in_thread", fake_run)
         monkeypatch.setattr(dialog, "_populate_results", lambda: None)
 
         dialog._start_computation()
         dialog._start_computation()
         assert len(pending) == 2
 
+        # Set a sentinel result to verify no stale completion mutates it.
+        sentinel = object()
+        dialog._result = sentinel
+
         pending[0][0]()
         pending[0][1]()
 
-        assert dialog._result is None
+        assert dialog._result is sentinel
         assert dialog._error is None
 
         pending[1][0]()

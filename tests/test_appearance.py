@@ -109,3 +109,29 @@ def test_cielab_ciede2000_identical_images_give_zero_delta() -> None:
 def test_cielab_rejects_unknown_metric() -> None:
     with pytest.raises(ValueError, match="unsupported metric"):
         CIELABSpace(metric="unknown")
+
+
+def test_make_appearance_space_returns_correct_types() -> None:
+    from colorcast.analysis.appearance import make_appearance_space
+
+    assert isinstance(make_appearance_space("cielab"), CIELABSpace)
+    assert isinstance(make_appearance_space("ictcp"), ICtCpSpace)
+    assert make_appearance_space("cielab").name == "CIELAB (ciede2000)"
+    assert make_appearance_space("ictcp").name == "ICtCp"
+
+
+def test_make_appearance_space_rejects_unknown() -> None:
+    from colorcast.analysis.appearance import make_appearance_space
+
+    with pytest.raises(ValueError, match="unsupported appearance space"):
+        make_appearance_space("unknown")
+
+
+def test_ictcp_linear_transfer_does_not_mutate_source() -> None:
+    rgb = np.random.rand(16, 16, 3).astype(np.float64)
+    original = rgb.copy()
+
+    space = ICtCpSpace(transfer_function="linear")
+    _ = space.from_rgb(rgb)
+
+    np.testing.assert_array_equal(rgb, original)
